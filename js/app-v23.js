@@ -36,6 +36,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     type:       'visitor',
   });
 
+  const clearChatBtn = document.getElementById('visitorNewChat');
+  if (clearChatBtn) {
+    clearChatBtn.addEventListener('click', () => visitorAI.reset());
+  }
+
   // Owner Dashboard button → login modal
   document.getElementById('btnOwnerDashboard').addEventListener('click', () => openLoginModal());
   const footerOwner = document.getElementById('footerOwnerLink');
@@ -395,14 +400,19 @@ async function loadPastRequests(email) {
   listEl.innerHTML = meetings.map(m => {
     const dateStr = formatDateShort(m.date);
     const timeStr = formatTimeRange(m.start_time, m.end_time);
+    const isCancelable = m.status === 'pending' || m.status === 'approved';
+    const cancelBtn = isCancelable
+      ? `<button class="btn btn-danger btn-xs" onclick="cancelMeetingByVisitor('${m.id}')" style="margin-left: 8px; padding: 4px 8px; font-size: 10px; border-radius: 4px; line-height: 1; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 22px;">Cancel</button>`
+      : '';
     return `
       <div style="background:var(--surface-2);border:1px solid var(--border);padding:10px 12px;border-radius:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-weight:700;color:var(--text)">${escapeHtml(m.meeting_title)}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px">📅 ${dateStr} at ${timeStr}</div>
         </div>
-        <div>
+        <div style="display;flex;align-items:center;gap:6px>
           ${statusPill(m.status, m)}
+          ${cancelBtn}
         </div>
       </div>`;
   }).join('');
@@ -419,15 +429,18 @@ async function loadPastRequests(email) {
   if (bookingBody) {
     if (upcoming) {
       bookingBody.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;text-align:left;background:#f5f3ff;border:1px solid rgba(124, 58, 237, 0.2);padding:12px;border-radius:8px">
-          <div style="font-size:24px">🎉</div>
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--clr-primary)">Upcoming Confirmed Meeting</div>
-            <div style="font-size:12.5px;font-weight:600;margin-top:2px">${escapeHtml(upcoming.meeting_title)}</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">📅 ${formatDate(upcoming.date)}</div>
-            <div style="font-size:11px;color:var(--text-muted)">⏰ ${formatTimeRange(upcoming.start_time, upcoming.end_time)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;text-align:left;background:#f5f3ff;border:1px solid rgba(124, 58, 237, 0.2);padding:12px;border-radius:8px;width:100%">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:24px">🎉</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--clr-primary)">Upcoming Confirmed Meeting</div>
+              <div style="font-size:12.5px;font-weight:600;margin-top:2px">${escapeHtml(upcoming.meeting_title)}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px">📅 ${formatDate(upcoming.date)}</div>
+              <div style="font-size:11px;color:var(--text-muted)">⏰ ${formatTimeRange(upcoming.start_time, upcoming.end_time)}</div>
+            </div>
           </div>
-        </div>`;
+          <button class="btn btn-danger btn-sm" onclick="cancelMeetingByVisitor('${upcoming.id}')" style="margin-top:4px;width:100%;font-size:11px;padding:6px;cursor:pointer">Cancel Meeting</button>
+          </div>`;
     } else {
       resetBookingCard();
     }
@@ -675,3 +688,121 @@ function subscribeRealtime() {
     .subscribe();
 }
 
+async function cancelMeetingByVisitor(meetingId) {
+  const reason = prompt("Please enter a reason for cancelling this meeting (optional):");
+  if (reason === null) return; // User cancelled prompt
+  
+  const { data: meeting, error: fetchErr } = await db.from('meetings').select('*').eq('id', meetingId).single();
+  if (fetchErr || !meeting) {
+    showToast('Error finding meeting: ' + (fetchErr?.message || 'Not found'), 'error');
+    return;
+  }
+  
+  const oldStatus = meeting.status;
+  
+  // Update meeting status
+  const { error: updateErr } = await db.from('meetings')
+    .update({
+      status: 'cancelled',
+      cancelled_by: 'visitor',
+      cancellation_reason: reason || 'Cancelled by visitor'
+    })
+    .eq('id', meetingId);
+  
+  if (updateErr) {
+    showToast('Error cancelling meeting: ' + updateErr.message, 'error');
+    return;
+  }
+  
+  // If it was approved, reopen the slot
+  if (oldStatus === 'approved') {
+    try {
+      await db.from('slots').update({ status: 'available' })
+        .eq('date', meeting.date)
+        .eq('start_time', meeting.start_time)
+        .eq('status', 'booked');
+    } catch (e) {
+      console.warn('Reopen slot error:', e);
+    }
+  }
+  
+  // Log to activity log
+  try {
+    await db.from('activity_log').insert({
+      action: 'cancelled',
+      description: `${meeting.visitor_name} cancelled their meeting request`,
+      meeting_id: meetingId,
+      actor: 'visitor'
+    });
+  } catch (e) {
+    console.warn('Log activity error:', e);
+  }
+  
+  // Send email notifications
+  const dateStr = formatDate(meeting.date);
+  const timeStr = formatTimeRange(meeting.start_time, meeting.end_time);
+  
+  // Email to Owner
+  const ownerSubject = `MyScheduler Action: Visitor Cancelled meeting with ${meeting.visitor_name}`;
+  const ownerMsg = `
+Hello Vyshnavi,
+
+The meeting request from ${meeting.visitor_name} has been CANCELLED by the visitor.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (CANCELLED BY VISITOR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : ${meeting.meeting_title}
+Date   : ${dateStr}
+Time   : ${timeStr}
+Reason : ${reason || 'Cancelled by visitor'}
+By     : visitor
+
+— MyScheduler System
+  `.trim();
+  
+  await sendSystemEmail({
+    to: CONFIG.OWNER_EMAIL,
+    subject: ownerSubject,
+    message: ownerMsg
+  });
+  
+  // Email to Visitor
+  const visitorSubject = `MyScheduler: Meeting Cancelled`;
+  const visitorMsg = `
+Hello ${meeting.visitor_name},
+
+This email confirms that your meeting request has been successfully CANCELLED.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (CANCELLED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : ${meeting.meeting_title}
+Date   : ${dateStr}
+Time   : ${timeStr}
+Reason : ${reason || 'Cancelled by visitor'}
+
+If you would like to select another time slot, please visit the booking page again.
+
+Booking Page: ${window.location.origin}/index.html
+
+Thank you,
+MyScheduler System
+  `.trim();
+  
+  await sendSystemEmail({
+    to: meeting.email,
+    subject: visitorSubject,
+    message: visitorMsg
+  });
+  
+  showToast('Meeting cancelled successfully.', 'success');
+  
+  // Refresh visitor view
+  const emailInput = document.getElementById('visitorEmail').value.trim();
+  if (emailInput) {
+    await loadPastRequests(emailInput);
+  }
+}
+
+window.cancelMeetingByVisitor = cancelMeetingByVisitor;
