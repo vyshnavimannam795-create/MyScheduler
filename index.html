@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>MyScheduler</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+  <meta name="description" content="Schedule a meeting with the owner at your convenience. We'll get back to you soon.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link rel="stylesheet" href="css/style.css?v=23">
+</head>
+<body>
+
+<!-- ═══════════════════════ TOP BAR ═══════════════════════════ -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-icon">📅</div>
+    <span class="logo-text">MyScheduler</span>
+  </div>
+  <button class="btn btn-primary" id="btnOwnerDashboard">
+    ← Owner Dashboard
+  </button>
+</header>
+
+<!-- ═══════════════════════ PAGE HERO ═════════════════════════ -->
+<section class="page-hero">
+  <h1>Request a Meeting with the Owner</h1>
+  <p>Schedule a meeting at your convenience. We'll get back to you soon.</p>
+</section>
+
+<!-- ═══════════════════════ 3-COL GRID ════════════════════════ -->
+<main class="booking-grid">
+
+  <!-- ── COLUMN 1: Meeting Details Form ──────────────────── -->
+  <div class="column-container" style="display:flex;flex-direction:column;gap:20px">
+    <div class="card card-glow-blue">
+      <div class="card-header">
+        <div class="card-icon card-icon-blue">📋</div>
+        <h2>Meeting Details</h2>
+      </div>
+      <div class="card-body">
+        <form id="meetingForm" novalidate>
+          <div class="form-group">
+            <label for="visitorName">Your Name</label>
+            <input type="text" id="visitorName" class="input" placeholder="Enter your full name" required>
+          </div>
+          <div class="form-group">
+            <label for="visitorEmail">Email</label>
+            <input type="email" id="visitorEmail" class="input" placeholder="Enter your email address" required>
+          </div>
+          <div class="form-group">
+            <label for="meetingTitle">Meeting Title</label>
+            <input type="text" id="meetingTitle" class="input" placeholder="Enter meeting title" required>
+          </div>
+          <div class="form-group">
+            <label for="meetingDesc">Meeting Description</label>
+            <textarea id="meetingDesc" class="textarea" placeholder="Describe the purpose of the meeting..." rows="4" required></textarea>
+            <div class="helper-text" id="descHelper">Minimum 25 characters</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0">
+              <label for="meetingDate">Date</label>
+              <input type="date" id="meetingDate" class="input" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label for="startTime">Start Time</label>
+              <input type="time" id="startTime" class="input" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label for="endTime">End Time</label>
+              <input type="time" id="endTime" class="input" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full mt-4" id="submitBtn">
+            ✈ Request Meeting
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- My Past Requests Card -->
+    <div class="card card-glow-purple" id="pastRequestsCard">
+      <div class="card-header">
+        <div class="card-icon card-icon-purple">📋</div>
+        <h2>My Past Requests</h2>
+      </div>
+      <div class="card-body" style="padding:16px;text-align:center">
+        <p class="text-sm text-muted mb-3" id="pastRequestsStatus">Enter your email address above to view your previous requests.</p>
+        <div id="pastRequestsList" class="hidden" style="display:flex;flex-direction:column;gap:10px;text-align:left"></div>
+      </div>
+    </div>
+
+    <!-- Important Notes Card -->
+    <div class="card card-glow-yellow">
+      <div class="card-header">
+        <div class="card-icon card-icon-yellow">💡</div>
+        <h2>Important Notes</h2>
+      </div>
+      <div class="card-body" style="padding:16px;font-size:12.5px;line-height:1.6;color:var(--text-muted)">
+        <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+          <li>You will receive an email confirmation once your request is submitted.</li>
+          <li>The owner will review your request and get back to you.</li>
+          <li>Please check your email for updates.</li>
+          <li>You can view or cancel your request from the email link.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COLUMN 2: Select a Date & Available Time Slots ──── -->
+  <div class="slots-column" style="display:flex;flex-direction:column;gap:20px">
+    <!-- Calendar Card -->
+    <div class="card card-glow-purple" id="calendarCard">
+      <div class="card-header">
+        <div class="card-icon card-icon-purple">📅</div>
+        <h2>Select a Date</h2>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <div class="calendar-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <button type="button" class="btn btn-secondary btn-sm" id="calPrevMonth">‹</button>
+          <span id="calMonthYear" style="font-weight:700;font-size:15px;color:var(--clr-primary)"></span>
+          <button type="button" class="btn btn-secondary btn-sm" id="calNextMonth">›</button>
+        </div>
+        <div class="calendar-days-grid" style="display:grid;grid-template-columns:repeat(7, 1fr);gap:4px;text-align:center;font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div class="calendar-dates-grid" id="calendarGrid" style="display:grid;grid-template-columns:repeat(7, 1fr);gap:6px">
+          <!-- Populated by JS -->
+        </div>
+        <!-- Legend -->
+        <div class="calendar-legend" style="display:flex;justify-content:center;gap:12px;margin-top:16px;font-size:10.5px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px">
+          <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block"></span> Available</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#f59e0b;display:inline-block"></span> Few Slots</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;display:inline-block"></span> Less / No Slots</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:#2563eb;display:inline-block"></span> Rescheduled</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Available Time Slots -->
+    <div class="card card-glow-green">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="card-icon card-icon-green">⏰</div>
+          <h2 id="slotsHeaderDate">Available Time Slots</h2>
+        </div>
+      </div>
+      <div class="card-body" style="padding:16px">
+        <p class="text-xs text-muted mb-3" style="display:flex;align-items:center;gap:6px;background:var(--surface-2);padding:8px 12px;border-radius:6px;border:1px solid var(--border)">
+          <span>ℹ️</span> Completed or fully booked slots are disabled.
+        </p>
+        <div class="slot-list" id="unifiedSlotList">
+          <div class="empty-state"><div class="empty-icon">🕐</div><p>Select a date above to load slots…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COLUMN 3: AI Assistant & Booking Details ────────── -->
+  <div style="display:flex;flex-direction:column;gap:20px">
+    <!-- AI Assistant Card -->
+    <div class="card card-glow-purple ai-panel-card" style="min-height:360px">
+      <div class="card-header" style="border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; width:100%">
+        <div style="display:flex; align-items:center; gap:10px">
+          <div class="card-icon card-icon-purple">✨</div>
+          <div>
+            <h2>AI Assistant</h2>
+            <div class="card-subtitle">Your scheduling assistant</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="visitorNewChat" style="padding:4px 8px; font-size:11px; display:flex; align-items:center; gap:4px; margin-left:auto;">
+          ↺ Clear
+        </button>
+      </div>
+      <div class="ai-container">
+        <div class="ai-messages" id="aiMessages"></div>
+        <div class="ai-suggestions" id="aiChips">
+          <div class="ai-chip"><span class="chip-icon">📅</span> What are the available slots today?</div>
+          <div class="ai-chip"><span class="chip-icon">📖</span> How do I schedule a meeting?</div>
+          <div class="ai-chip"><span class="chip-icon">🔄</span> Can I reschedule my meeting?</div>
+          <div class="ai-chip"><span class="chip-icon">❌</span> What is the cancellation policy?</div>
+        </div>
+        <div class="ai-input-row">
+          <input type="text" id="aiInput" class="input" placeholder="Type your message...">
+          <button class="ai-send-btn" id="aiSend">✈</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Your Booking Card -->
+    <div class="card card-glow-blue" id="visitorBookingCard">
+      <div class="card-header">
+        <div class="card-icon card-icon-blue">📅</div>
+        <h2>Your Booking</h2>
+      </div>
+      <div class="card-body" style="padding:16px;text-align:center" id="visitorBookingBody">
+        <div style="font-size:32px;margin-bottom:8px">📅</div>
+        <p class="text-sm font-semibold" style="margin-bottom:4px">You don't have any upcoming booking.</p>
+        <p class="text-xs text-muted">Book a meeting to see your details here.</p>
+      </div>
+    </div>
+
+    <!-- Timely Updates Card -->
+    <div class="card card-glow-blue">
+      <div class="card-header">
+        <div class="card-icon card-icon-blue">🔔</div>
+        <h2>Timely Updates</h2>
+      </div>
+      <div class="card-body" style="padding:16px;font-size:12.5px;color:var(--text-muted);line-height:1.5">
+        Get notified about your meeting status and reschedule proposals instantly in your inbox.
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" style="margin-top:48px;padding:32px 24px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text-muted)">
+  <div style="margin-bottom:12px;display:flex;justify-content:center;gap:24px">
+    <a href="#" style="color:var(--text-muted);text-decoration:none;font-weight:500">Home</a>
+    <a href="#" id="footerOwnerLink" style="color:var(--text-muted);text-decoration:none;font-weight:500">Owner Dashboard</a>
+    <a href="https://supabase.com" target="_blank" style="color:var(--text-muted);text-decoration:none;font-weight:500">Supabase</a>
+    <a href="https://web3forms.com" target="_blank" style="color:var(--text-muted);text-decoration:none;font-weight:500">Web3Forms</a>
+  </div>
+  <div>© 2026 MyScheduler. All rights reserved. | Privacy Policy | Terms of Service</div>
+</footer>
+
+<!-- ═══════════════ OWNER LOGIN MODAL ══════════════════════════ -->
+<div class="modal-overlay" id="loginOverlay">
+  <div class="modal">
+    <button class="modal-close" id="loginClose">✕</button>
+    <div class="modal-title">🔒 Owner Login</div>
+    <p class="modal-subtitle">Enter your passcode to access the dashboard</p>
+
+    <div class="form-group">
+      <div class="password-wrap">
+        <input type="password" id="passcodeInput" class="input" placeholder="••••••••" autocomplete="current-password">
+        <button type="button" class="pw-toggle" id="pwToggle">👁</button>
+      </div>
+      <div class="error-msg hidden" id="loginError">
+        <span>⊘</span> Incorrect passcode. Please try again.
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="loginCancel">Cancel</button>
+      <button class="btn btn-primary" id="loginSubmit">Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ACCESS GRANTED MODAL ═══════════════════════ -->
+<div class="modal-overlay" id="accessOverlay">
+  <div class="modal modal-access">
+    <div class="access-icon">✅</div>
+    <div class="access-title">Access Granted!</div>
+    <div class="access-subtitle">Redirecting to dashboard…</div>
+    <div class="progress-wrap">
+      <div class="progress-bar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="js/config.js?v=28"></script>
+<script src="js/supabase-client.js?v=28"></script>
+<script src="js/utils-v24.js?v=28"></script>
+<script src="js/ai.js?v=28"></script>
+<script src="js/app-v24.js?v=28"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+Subject: MyScheduler: Meeting Cancelled
+
+Hello [Visitor Name],
+
+This email confirms that your meeting request has been successfully CANCELLED.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (CANCELLED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : [Meeting Title]
+Date   : [Meeting Date]
+Time   : [Meeting Start Time] - [Meeting End Time]
+Reason : [Cancellation Reason]
+
+If you would like to select another time slot, please visit the booking page again.
+
+Booking Page: [Booking Page URL]
+
+Thank you,
+MyScheduler System
