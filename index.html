@@ -165,12 +165,17 @@
   <div style="display:flex;flex-direction:column;gap:20px">
     <!-- AI Assistant Card -->
     <div class="card card-glow-purple ai-panel-card" style="min-height:360px">
-      <div class="card-header" style="border-bottom:1px solid var(--border)">
-        <div class="card-icon card-icon-purple">✨</div>
-        <div>
-          <h2>AI Assistant</h2>
-          <div class="card-subtitle">Your scheduling assistant</div>
+      <div class="card-header" style="border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; width:100%">
+        <div style="display:flex; align-items:center; gap:10px">
+          <div class="card-icon card-icon-purple">✨</div>
+          <div>
+            <h2>AI Assistant</h2>
+            <div class="card-subtitle">Your scheduling assistant</div>
+          </div>
         </div>
+        <button class="btn btn-secondary btn-sm" id="visitorNewChat" style="padding:4px 8px; font-size:11px; display:flex; align-items:center; gap:4px; margin-left:auto;">
+          ↺ Clear
+        </button>
       </div>
       <div class="ai-container">
         <div class="ai-messages" id="aiMessages"></div>
@@ -261,10 +266,10 @@
 </div>
 
 <!-- Scripts -->
-<script src="js/config.js?v=27"></script>
-<script src="js/supabase-client.js?v=27"></script>
-<script src="js/utils-v23.js?v=27"></script>
-<script src="js/ai.js?v=27"></script>
-<script src="js/app-v23.js?v=27"></script>
+<script src="js/config.js?v=28"></script>
+<script src="js/supabase-client.js?v=28"></script>
+<script src="js/utils-v24.js?v=28"></script>
+<script src="js/ai.js?v=28"></script>
+<script src="js/app-v24.js?v=28"></script>
 </body>
 </html>
