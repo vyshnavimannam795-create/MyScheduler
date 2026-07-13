@@ -1,0 +1,19 @@
+Subject: MyScheduler: Meeting Request Update
+
+Hello [Visitor Name],
+
+Vyshnavi Mannam has REJECTED your meeting request.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (REJECTED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : [Meeting Title]
+Date   : [Meeting Date]
+Time   : [Meeting Start Time] - [Meeting End Time]
+
+If you would like to select another time slot, please visit the booking page again or contact the owner directly.
+
+Booking Page: [Booking Page URL]
+
+Thank you,
+MyScheduler System

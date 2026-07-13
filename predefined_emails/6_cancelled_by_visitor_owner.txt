@@ -1,0 +1,16 @@
+Subject: MyScheduler Action: Visitor Cancelled meeting with [Visitor Name]
+
+Hello Vyshnavi,
+
+The meeting request from [Visitor Name] has been CANCELLED by the visitor.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (CANCELLED BY VISITOR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : [Meeting Title]
+Date   : [Meeting Date]
+Time   : [Meeting Start Time] - [Meeting End Time]
+Reason : [Cancellation Reason]
+By     : visitor
+
+— MyScheduler System

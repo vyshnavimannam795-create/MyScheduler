@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>MyScheduler — Owner Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+  <meta name="description" content="MyScheduler owner dashboard — manage meetings, slots, and scheduling.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&family=Sora:wght@700;800&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <link rel="stylesheet" href="css/style.css?v=27">
+</head>
+<body>
+
+<!-- ══════════════════════ TOP BAR ════════════════════════════ -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-icon" style="color:#fff">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+    </div>
+    <span class="logo-text">MyScheduler</span>
+  </div>
+  <a href="index.html" class="btn btn-outline">← Return to Booking Page</a>
+</header>
+
+<!-- ══════════════════════ MAIN LAYOUT ════════════════════════ -->
+<div class="main-wrapper">
+
+  <!-- ──────────── SIDEBAR ──────────── -->
+  <aside class="sidebar">
+    <nav class="sidebar-nav">
+      <a class="nav-link active" data-view="dashboard" href="#">
+        <span class="nav-icon nav-icon-purple">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        </span>
+        Dashboard
+      </a>
+      <a class="nav-link" data-view="requests" href="#">
+        <span class="nav-icon nav-icon-blue">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+        </span>
+        Meeting Requests
+      </a>
+      <a class="nav-link" data-view="approved" href="#">
+        <span class="nav-icon nav-icon-green">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </span>
+        Approved Meetings
+      </a>
+      <a class="nav-link" data-view="completed" href="#">
+        <span class="nav-icon nav-icon-cyan">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+        </span>
+        Completed Meetings
+      </a>
+      <a class="nav-link" data-view="cancelled" href="#">
+        <span class="nav-icon nav-icon-red">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+        </span>
+        Cancelled Meetings
+      </a>
+      <a class="nav-link" data-view="slots" href="#">
+        <span class="nav-icon nav-icon-orange">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        </span>
+        Slots Management
+      </a>
+      <a class="nav-link" data-view="past" href="#">
+        <span class="nav-icon nav-icon-slate">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        </span>
+        Past Schedules
+      </a>
+      <a class="nav-link" data-view="reports" href="#">
+        <span class="nav-icon nav-icon-indigo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+        </span>
+        Reports
+      </a>
+      <a class="nav-link" data-view="ai" href="#">
+        <span class="nav-icon nav-icon-violet">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"></path></svg>
+        </span>
+        AI Assistant
+      </a>
+      <a class="nav-link" data-view="settings" href="#">
+        <span class="nav-icon nav-icon-gold">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </span>
+        Settings
+      </a>
+    </nav>
+
+    <div class="profile-block">
+      <div class="profile-info">
+        <div class="owner-avatar" id="sidebarAvatar">VM</div>
+        <div class="profile-details">
+          <div class="profile-role">Owner</div>
+          <div class="profile-name" id="sidebarName">Vyshnavi Mannam</div>
+          <div class="online-badge"><span class="online-dot"></span> Online</div>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-full btn-sm" id="logoutBtn">Log Out</button>
+    </div>
+  </aside>
+
+  <!-- ──────────── MAIN CONTENT ──────────── -->
+  <main class="main-content" id="mainContent">
+
+    <!-- ════════════ VIEW: DASHBOARD ════════════ -->
+    <div class="view active" id="view-dashboard">
+
+      <!-- Header -->
+      <div class="dash-header">
+        <div>
+          <div class="dash-title">Owner Dashboard</div>
+          <div class="dash-subtitle">Manage all meeting requests, schedules, and slots</div>
+        </div>
+        <div class="live-datetime">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span id="liveDateTime">Loading…</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card card-glow-purple">
+          <div class="stat-icon" style="background:#eff6ff; color:#2563eb">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          </div>
+          <div><div class="stat-number" id="st-total">-</div><div class="stat-label">Total Requests</div><div class="stat-sub">All time</div></div>
+        </div>
+        <div class="stat-card card-glow-yellow">
+          <div class="stat-icon" style="background:#fffbeb; color:#ca6f07">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h14M5 22h14M19 2v4c0 3.31-2.69 6-6 6h0c-3.31 0-6-2.69-6-6V2M6 12v6c0 3.31 2.69 6 6 6h0c3.31 0 6-2.69 6-6v-6"></path></svg>
+          </div>
+          <div><div class="stat-number" id="st-pending">-</div><div class="stat-label">Pending Requests</div><div class="stat-sub">Awaiting response</div></div>
+        </div>
+        <div class="stat-card card-glow-green">
+          <div class="stat-icon" style="background:#ecfdf5; color:#059669">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          </div>
+          <div><div class="stat-number" id="st-approved">-</div><div class="stat-label">Approved Meetings</div><div class="stat-sub">Confirmed</div></div>
+        </div>
+        <div class="stat-card card-glow-red">
+          <div class="stat-icon" style="background:#fef2f2; color:#dc2626">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+          </div>
+          <div><div class="stat-number" id="st-rejected">-</div><div class="stat-label">Rejected Meetings</div><div class="stat-sub">Declined</div></div>
+        </div>
+        <div class="stat-card card-glow-red">
+          <div class="stat-icon" style="background:#fef2f2; color:#dc2626">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+          </div>
+          <div><div class="stat-number" id="st-cancelled">-</div><div class="stat-label">Cancelled Meetings</div><div class="stat-sub">Cancelled</div></div>
+        </div>
+        <div class="stat-card card-glow-blue">
+          <div class="stat-icon" style="background:#eff6ff; color:#2563eb">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          </div>
+          <div><div class="stat-number" id="st-completed">-</div><div class="stat-label">Completed Meetings</div><div class="stat-sub">Finished</div></div>
+        </div>
+      </div>
+
+      <!-- Meeting Requests + AI Panel -->
+      <div class="dash-content-row">
+
+        <!-- Meeting Table -->
+        <div class="card card-glow-blue">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; color: var(--clr-primary)"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+              Meeting Requests
+            </div>
+            <div class="table-toolbar-right">
+              <select class="select input" id="statusFilter" style="width:130px;font-size:13px;padding:8px 12px">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="completed">Completed</option>
+              </select>
+              <div class="search-wrap">
+                <span class="search-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <input type="text" id="searchInput" class="input search-input" placeholder="Search meetings…">
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="meetingsTable">
+              <thead>
+                <tr>
+                  <th>Visitor Name</th>
+                  <th>Email</th>
+                  <th>Meeting Title</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="meetingsBody">
+                <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span> Loading…</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-pagination">
+            <span id="paginationInfo">Showing 0 entries</span>
+            <div class="page-btns" id="pageButtons"></div>
+          </div>
+        </div>
+
+        <!-- AI Panel -->
+        <div class="card card-glow-purple" style="display:flex;flex-direction:column">
+          <div class="ai-panel-header">
+            <div class="ai-panel-title" style="display:flex; align-items:center; gap:6px">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--clr-primary)"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"></path></svg>
+              AI Assistant
+            </div>
+            <button class="btn btn-secondary btn-sm" id="dashNewChat">↺ New Chat</button>
+          </div>
+          <div class="ai-messages-dash" id="dashAiMessages"></div>
+          <div class="ai-suggestions" id="dashAiChips">
+            <div class="ai-chip"><span class="chip-icon">⚠️</span> Which meetings need my attention?</div>
+            <div class="ai-chip"><span class="chip-icon">📅</span> Show today's schedule</div>
+            <div class="ai-chip"><span class="chip-icon">⏰</span> Suggest optimal meeting times</div>
+            <div class="ai-chip"><span class="chip-icon">📊</span> Analyze workload</div>
+            <div class="ai-chip"><span class="chip-icon">📈</span> Which slots have most requests?</div>
+          </div>
+          <div class="ai-input-row">
+            <input type="text" id="dashAiInput" class="input" placeholder="Type your message…">
+            <button class="ai-send-btn" id="dashAiSend">✈</button>
+          </div>
+        </div>
+
+      </div><!-- /dash-content-row -->
+
+      <!-- Bottom Row: Slot Mgmt | Reschedule | Recent Activity -->
+      <div class="dash-bottom-row">
+
+        <!-- Slot Management -->
+        <div class="card card-glow-blue">
+          <div class="card-header">
+            <div class="card-icon card-icon-blue">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </div>
+            <div>
+              <h3>Slot Management</h3>
+              <div class="card-subtitle">Create and manage available slots for bookings</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slot-action-btns">
+              <button class="btn btn-primary btn-sm" id="btnAddSlot">+ Add Slot</button>
+              <button class="btn btn-info btn-sm"    id="btnEditSlot">✏ Edit Slot</button>
+              <button class="btn btn-warning btn-sm" id="btnBlockSlot">🚫 Block Slot</button>
+              <button class="btn btn-danger btn-sm"  id="btnDeleteSlot">🗑 Delete Slot</button>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-success btn-sm" id="btnReopenSlot">↺ Reopen Slot</button>
+              <button class="btn btn-secondary btn-sm" id="btnInitSlots" style="margin-left:6px">📅 Init Today's Slots</button>
+            </div>
+            <div class="mt-3 text-sm text-muted" id="slotMgmtInfo">Select a slot from the list to edit/block/delete/reopen.</div>
+          </div>
+        </div>
+
+        <!-- Reschedule Meeting -->
+        <div class="card card-glow-yellow">
+          <div class="card-header">
+            <div class="card-icon card-icon-orange">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </div>
+            <div>
+              <h3>Reschedule Meeting</h3>
+              <div class="card-subtitle">Suggest new time to visitor</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label>New Date</label>
+                <input type="date" id="reschedDate" class="input">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>New Start Time</label>
+                <input type="time" id="reschedStart" class="input">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>New End Time</label>
+                <input type="time" id="reschedEnd" class="input">
+              </div>
+            </div>
+            <div class="form-group mt-3">
+              <label>Reason for rescheduling (optional)</label>
+              <textarea id="reschedReason" class="textarea" rows="2" placeholder="Ex: I have another meeting at that time."></textarea>
+            </div>
+            <button class="btn btn-primary btn-full" id="btnSendReschedule">Send Reschedule Suggestion</button>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card card-glow-purple">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="card-icon card-icon-purple">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+              <h3>Recent Activity</h3>
+            </div>
+            <button class="btn btn-danger btn-xs" id="btnClearActivity" style="padding:4px 8px; font-size:11px; display:flex; align-items:center; gap:4px; margin-left:auto;">
+              🗑️ Clear
+            </button>
+          </div>
+          <div class="activity-list" id="activityList">
+            <div class="empty-state"><span class="spinner"></span> Loading…</div>
+          </div>
+        </div>
+
+      </div><!-- /dash-bottom-row -->
+
+      <!-- Selected Meeting Details -->
+      <div class="card hidden" id="selectedMeetingCard">
+        <div class="meeting-detail-header">
+          <div class="card-icon card-icon-blue">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          </div>
+          <h3>Selected Meeting Details</h3>
+          <div id="selectedStatus" style="margin-left:8px"></div>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="clearSelectedMeeting()">✕ Close</button>
+        </div>
+
+        <div class="selected-detail-grid">
+          <div class="meeting-detail-body">
+            <!-- Visitor Info -->
+            <div class="detail-section">
+              <div class="visitor-avatar-lg" id="selectedAvatar">JD</div>
+              <div class="visitor-name-lg"   id="selectedName">John Doe</div>
+              <div class="visitor-contact"><span>✉</span> <span id="selectedEmail">john@example.com</span></div>
+              <div class="visitor-contact"><span>📞</span> <span id="selectedPhone">+1 123 456 7890</span></div>
+            </div>
+
+            <!-- Meeting Info -->
+            <div class="detail-section">
+              <div class="detail-field">
+                <div class="detail-label">Meeting Title</div>
+                <div class="detail-value font-bold" id="selectedTitle">—</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-label">Date &amp; Time</div>
+                <div class="detail-value" id="selectedDateTime">—</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-label">Meeting Description</div>
+                <div class="detail-value text-sm" id="selectedDesc">—</div>
+              </div>
+            </div>
+
+            <!-- Visitor Message -->
+            <div class="detail-section">
+              <div class="detail-field">
+                <div class="detail-label">Visitor Message</div>
+                <div class="detail-value text-sm" id="selectedMessage">—</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-label">Requested on</div>
+                <div class="detail-value text-sm text-muted" id="selectedRequestedAt">—</div>
+              </div>
+              <div id="ownerRemarksDisplay" class="detail-field hidden">
+                <div class="detail-label">Owner Remarks</div>
+                <div class="detail-value text-sm" id="selectedOwnerRemarks">—</div>
+              </div>
+              <div id="cancelReasonDisplay" class="detail-field hidden">
+                <div class="detail-label">Cancellation Reason</div>
+                <div class="detail-value text-sm" id="selectedCancelReason">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Owner Actions -->
+          <div class="owner-actions-box">
+            <div class="owner-actions-title">Owner Actions</div>
+            <div id="ownerActionButtons"></div>
+          </div>
+        </div>
+
+        <!-- Cancel Reason Input (shown when owner clicks Cancel) -->
+        <div class="hidden" id="cancelReasonInput" style="padding:0 20px 20px">
+          <div class="form-group">
+            <label>Reason for Cancellation</label>
+            <textarea id="cancelReasonText" class="textarea" rows="3" placeholder="Enter reason for cancellation…"></textarea>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-secondary" onclick="hideCancelInput()">Keep Meeting</button>
+            <button class="btn btn-solid-danger" id="confirmCancelBtn">Cancel Meeting</button>
+          </div>
+        </div>
+
+        <!-- Approve Remarks Input -->
+        <div class="hidden" id="approveRemarksInput" style="padding:0 20px 20px">
+          <div class="form-group">
+            <label>Owner Remarks (optional)</label>
+            <input type="text" id="approveRemarksText" class="input" placeholder="e.g. Please join 5 minutes early.">
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-secondary" onclick="hideApproveInput()">Cancel</button>
+            <button class="btn btn-solid-success" id="confirmApproveBtn">✓ Confirm Approve</button>
+          </div>
+        </div>
+
+        <!-- Mark Completed Input -->
+        <div class="hidden" id="completeInput" style="padding:0 20px 20px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group">
+              <label>Meeting Minutes</label>
+              <textarea id="completeMinutes" class="textarea" rows="3" placeholder="Discussed project requirements and timeline."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Action Items</label>
+              <textarea id="completeActions" class="textarea" rows="3" placeholder="- Send proposal by Friday&#10;- Team meeting next week"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Owner Remarks</label>
+              <textarea id="completeRemarks" class="textarea" rows="2" placeholder="Great discussion. Looking forward to next steps."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Follow-up Date</label>
+              <input type="date" id="completeFollowup" class="input">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <button class="btn btn-secondary" onclick="hideCompleteInput()">Cancel</button>
+            <button class="btn btn-primary" id="confirmCompleteBtn">✓ Mark as Completed</button>
+          </div>
+        </div>
+
+      </div><!-- /selectedMeetingCard -->
+
+      <!-- Same User's Previous Requests Card -->
+      <div class="card hidden card-glow-purple" id="userPreviousRequestsCard" style="margin-top: 32px">
+        <div class="card-header">
+          <div class="card-icon card-icon-purple">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          </div>
+          <h3>Previous Requests from this User</h3>
+        </div>
+        <div class="card-body" style="padding:16px">
+          <div id="userPreviousRequestsList" style="display:flex;flex-direction:column;gap:10px">
+            <!-- Populated dynamically when a meeting is selected -->
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /view-dashboard -->
+
+    <!-- ════════════ VIEW: MEETING REQUESTS ════════════ -->
+    <div class="view" id="view-requests">
+      <div class="dash-header mb-4">
+        <div><div class="dash-title">Meeting Requests</div><div class="dash-subtitle">All meeting requests across all statuses</div></div>
+      </div>
+      <div class="card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; color: var(--clr-primary)"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+            All Requests
+          </div>
+          <div class="table-toolbar-right">
+            <select class="select input" id="reqStatusFilter" style="width:130px;font-size:13px;padding:8px 12px"><option value="">All Status</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="cancelled">Cancelled</option><option value="completed">Completed</option></select>
+            <div class="search-wrap">
+              <span class="search-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </span>
+              <input type="text" id="reqSearch" class="input search-input" placeholder="Search…">
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table"><thead><tr><th>Visitor Name</th><th>Email</th><th>Meeting Title</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="reqTableBody"><tr><td colspan="7"><div class="empty-state"><span class="spinner"></span></div></td></tr></tbody></table>
+        </div>
+        <div class="table-pagination"><span id="reqPagInfo">Loading…</span><div class="page-btns" id="reqPageBtns"></div></div>
+      </div>
+    </div>
+
+    <!-- ════════════ VIEW: APPROVED ════════════ -->
+    <div class="view" id="view-approved">
+      <div class="dash-header mb-4"><div><div class="dash-title">Approved Meetings</div><div class="dash-subtitle">All confirmed meetings</div></div></div>
+      <div class="card"><div class="table-wrap">
+        <table class="data-table"><thead><tr><th>Visitor Name</th><th>Email</th><th>Meeting Title</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="approvedBody"></tbody></table>
+      </div></div>
+    </div>
+
+    <!-- ════════════ VIEW: COMPLETED ════════════ -->
+    <div class="view" id="view-completed">
+      <div class="dash-header mb-4"><div><div class="dash-title">Completed Meetings</div><div class="dash-subtitle">All finished meetings</div></div></div>
+      <div class="card"><div class="table-wrap">
+        <table class="data-table"><thead><tr><th>Visitor Name</th><th>Email</th><th>Meeting Title</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="completedBody"></tbody></table>
+      </div></div>
+    </div>
+
+    <!-- ════════════ VIEW: CANCELLED ════════════ -->
+    <div class="view" id="view-cancelled">
+      <div class="dash-header mb-4"><div><div class="dash-title">Cancelled Meetings</div><div class="dash-subtitle">All cancelled meetings</div></div></div>
+      <div class="card"><div class="table-wrap">
+        <table class="data-table"><thead><tr><th>Visitor Name</th><th>Email</th><th>Meeting Title</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="cancelledBody"></tbody></table>
+      </div></div>
+    </div>
+
+    <!-- ════════════ VIEW: SLOTS ════════════ -->
+    <div class="view" id="view-slots">
+      <div class="dash-header mb-4">
+        <div><div class="dash-title">Slots Management</div><div class="dash-subtitle">Create and manage available time slots</div></div>
+      </div>
+      <div class="slots-view-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon-green">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            </div>
+            <h3>All Slots</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-row-2 mb-3">
+              <div class="form-group" style="margin-bottom:0"><label>Filter by Date</label><input type="date" id="slotFilterDate" class="input"></div>
+              <div class="form-group" style="margin-bottom:0"><label>Filter by Status</label>
+                <select class="select input" id="slotFilterStatus"><option value="">All</option><option value="available">Available</option><option value="booked">Booked</option><option value="blocked">Blocked</option></select>
+              </div>
+            </div>
+            <div id="slotManageList"><div class="empty-state"><span class="spinner"></span></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon-purple">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <h3>Slot Actions</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group"><label>Date</label><input type="date" id="newSlotDate" class="input"></div>
+            <div class="form-row-2">
+              <div class="form-group"><label>Start Time</label><input type="time" id="newSlotStart" class="input"></div>
+              <div class="form-group"><label>End Time</label>  <input type="time" id="newSlotEnd" class="input"></div>
+            </div>
+            <div class="slot-action-btns">
+              <button class="btn btn-primary"  onclick="addSlotFromView()">+ Add Slot</button>
+              <button class="btn btn-warning"  onclick="blockSelectedSlot()">🚫 Block Selected</button>
+              <button class="btn btn-success"  onclick="reopenSelectedSlot()">↺ Reopen Selected</button>
+              <button class="btn btn-danger"   onclick="deleteSelectedSlot()">🗑 Delete Selected</button>
+              <button class="btn btn-secondary btn-full mt-2" onclick="initSlotsForDate()">📅 Initialize Default Slots for Date</button>
+            </div>
+            <div id="selectedSlotInfo" class="mt-3 text-sm text-muted">No slot selected.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════ VIEW: PAST SCHEDULES ════════════ -->
+    <div class="view" id="view-past">
+      <div class="dash-header mb-4"><div><div class="dash-title">Past Schedules</div><div class="dash-subtitle">Historical meetings before today</div></div></div>
+      <div class="card"><div class="table-wrap">
+        <table class="data-table"><thead><tr><th>Visitor Name</th><th>Email</th><th>Meeting Title</th><th>Date</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="pastBody"></tbody></table>
+      </div></div>
+    </div>
+
+    <!-- ════════════ VIEW: REPORTS ════════════ -->
+    <div class="view" id="view-reports">
+      <div class="dash-header mb-4"><div><div class="dash-title">Reports</div><div class="dash-subtitle">Meeting analytics and insights</div></div></div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)" id="reportStats"></div>
+      <div class="card mt-4">
+        <div class="card-header">
+          <div class="card-icon card-icon-blue">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          </div>
+          <h3>Meeting Status Breakdown</h3>
+        </div>
+        <div class="card-body" id="reportBreakdown"></div>
+      </div>
+    </div>
+
+    <!-- ════════════ VIEW: AI ASSISTANT ════════════ -->
+    <div class="view" id="view-ai">
+      <div class="dash-header mb-4"><div><div class="dash-title">AI Assistant</div><div class="dash-subtitle">Your intelligent scheduling assistant</div></div></div>
+      <div class="card" style="max-width:800px">
+        <div class="ai-panel-header">
+          <div class="ai-panel-title" style="display:flex; align-items:center; gap:6px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--clr-primary)"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m11.314 11.314l.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"></path></svg>
+            AI Assistant
+          </div>
+          <button class="btn btn-secondary btn-sm" id="fullAiNewChat">↺ New Chat</button>
+        </div>
+        <div class="ai-messages-dash" id="fullAiMessages" style="max-height:500px;min-height:300px"></div>
+        <div class="ai-suggestions" id="fullAiChips">
+          <div class="ai-chip"><span class="chip-icon">⚠️</span> Which meetings need my attention?</div>
+          <div class="ai-chip"><span class="chip-icon">📅</span> Show today's schedule</div>
+          <div class="ai-chip"><span class="chip-icon">⏰</span> Suggest optimal meeting times</div>
+          <div class="ai-chip"><span class="chip-icon">📊</span> Analyze workload</div>
+          <div class="ai-chip"><span class="chip-icon">📈</span> Which slots have most requests?</div>
+        </div>
+        <div class="ai-input-row">
+          <input type="text" id="fullAiInput" class="input" placeholder="Type your message…">
+          <button class="ai-send-btn" id="fullAiSend">✈</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════ VIEW: SETTINGS ════════════ -->
+    <div class="view" id="view-settings">
+      <div class="dash-header mb-4"><div><div class="dash-title">Settings</div><div class="dash-subtitle">Manage your preferences and account</div></div></div>
+      <div style="max-width:620px">
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-icon card-icon-purple">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-10 10c0 5.52 4.48 10 10 10a1 1 0 0 0 1-1v-1a2 2 0 0 1 2-2h2a5 5 0 0 0 5-5c0-5.52-4.48-10-10-10z"></path><circle cx="7.5" cy="10.5" r="1"></circle><circle cx="9" cy="7.5" r="1"></circle><circle cx="13" cy="7.5" r="1"></circle><circle cx="16.5" cy="9.5" r="1"></circle></svg>
+            </div>
+            <h3>Appearance</h3>
+          </div>
+          <div class="card-body">
+            <div class="setting-row">
+              <div><div class="setting-label">Dark Mode</div><div class="setting-desc">Toggle dark/light theme app-wide</div></div>
+              <label class="toggle"><input type="checkbox" id="darkModeToggle"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-icon card-icon-blue">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </div>
+            <h3>Profile</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Display Name</label>
+              <input type="text" id="settingName" class="input" placeholder="Your display name">
+            </div>
+            <button class="btn btn-primary btn-sm" id="saveNameBtn">Save Name</button>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-icon card-icon-red">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h3>Security</h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Current Passcode</label>
+              <input type="password" id="currentPw" class="input" placeholder="Enter current passcode">
+            </div>
+            <div class="form-group">
+              <label>New Passcode</label>
+              <input type="password" id="newPw" class="input" placeholder="Enter new passcode">
+            </div>
+            <div class="form-group">
+              <label>Confirm New Passcode</label>
+              <input type="password" id="confirmPw" class="input" placeholder="Re-enter new passcode">
+            </div>
+            <button class="btn btn-danger btn-sm" id="changePasscodeBtn">Change Passcode</button>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header">
+            <div class="card-icon card-icon-orange">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </div>
+            <h3>Notifications</h3>
+          </div>
+          <div class="card-body">
+            <div class="setting-row">
+              <div><div class="setting-label">New Meeting Requests</div><div class="setting-desc">Get notified when a visitor requests a meeting</div></div>
+              <label class="toggle"><input type="checkbox" id="notifNew" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">Cancellations</div><div class="setting-desc">Get notified when a meeting is cancelled</div></div>
+              <label class="toggle"><input type="checkbox" id="notifCancel" checked><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer" style="margin-top:auto;padding:24px 0 0;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;width:100%">
+      <div>© 2026 MyScheduler Dashboard.</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <a href="#" onclick="showView('dashboard');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Dashboard</a>
+        <a href="#" onclick="showView('requests');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Requests</a>
+        <a href="#" onclick="showView('approved');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Approved</a>
+        <a href="#" onclick="showView('completed');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Completed</a>
+        <a href="#" onclick="showView('cancelled');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Cancelled</a>
+        <a href="#" onclick="showView('slots');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Slots</a>
+        <a href="#" onclick="showView('past');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Past Schedules</a>
+        <a href="#" onclick="showView('reports');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Reports</a>
+        <a href="#" onclick="showView('settings');return false;" style="color:var(--text-muted);text-decoration:none;font-weight:500">Settings</a>
+      </div>
+    </footer>
+  </main><!-- /main-content -->
+</div><!-- /main-wrapper -->
+
+<!-- Add Slot Modal -->
+<div class="modal-overlay" id="addSlotOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('addSlotOverlay')">✕</button>
+    <div class="modal-title" style="display:flex; align-items:center; gap:6px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--clr-primary)"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+      Add Slot
+    </div>
+    <p class="modal-subtitle">Create a new available time slot</p>
+    <div class="form-group"><label>Date</label><input type="date" id="modalSlotDate" class="input"></div>
+    <div class="form-row-2">
+      <div class="form-group"><label>Start Time</label><input type="time" id="modalSlotStart" class="input"></div>
+      <div class="form-group"><label>End Time</label>  <input type="time" id="modalSlotEnd" class="input"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('addSlotOverlay')">Cancel</button>
+      <button class="btn btn-primary"   id="confirmAddSlot">Add Slot</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js?v=32"></script>
+<script src="js/supabase-client.js?v=32"></script>
+<script src="js/utils-v28.js?v=32"></script>
+<script src="js/ai.js?v=32"></script>
+<script src="js/owner-v28.js?v=32"></script>
+</body>
+</html>
