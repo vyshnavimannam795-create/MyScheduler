@@ -1,0 +1,18 @@
+Subject: MyScheduler: Meeting Approved!
+
+Hello [Visitor Name],
+
+Great news! Vyshnavi Mannam has APPROVED your meeting request.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING DETAILS (CONFIRMED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title  : [Meeting Title]
+Date   : [Meeting Date]
+Time   : [Meeting Start Time] - [Meeting End Time]
+Remarks: [Owner Remarks]
+
+Looking forward to meeting you.
+
+Thank you,
+MyScheduler System
