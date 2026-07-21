@@ -14,6 +14,12 @@ class VoiceBot {
     // Check role based on DOM elements
     this.role = document.getElementById('meetingForm') ? 'visitor' : 'owner';
 
+    // Chat history persistence
+    this.botType = `voicebot_${this.role}`;
+    this.sessionId = AI_PROVIDER.getSessionId(this.botType);
+    this.conversationHistory = [];
+    this._historyRestored = false;
+
     // Conversation State Machine
     this.state = {
       intent: null, // 'book' | 'view' | 'cancel' | 'reschedule' | 'approve' | 'reject' | 'add_slot' | 'delete_slot'
@@ -33,6 +39,25 @@ class VoiceBot {
 
     this.initUI();
     this.initSpeech();
+    this._restoreHistory();
+  }
+
+  // ── Restore prior conversation from Supabase, if any ───────
+  async _restoreHistory() {
+    try {
+      const past = await AI_PROVIDER.loadHistory(this.sessionId, this.botType);
+      if (past.length > 0) {
+        this.messagesEl.innerHTML = '';
+        this.conversationHistory = [];
+        past.forEach(m => this.addBubble(m.role, m.message, true, false));
+      } else {
+        this._showGreeting();
+      }
+      this._historyRestored = true;
+    } catch (err) {
+      console.warn('Voice bot history restore failed:', err);
+      this._showGreeting();
+    }
   }
 
   // ── UI Initialization ──────────────────────────────────────
@@ -101,7 +126,11 @@ class VoiceBot {
     });
     this.micBtnEl.addEventListener('click', () => this.toggleVoiceListening());
 
-    // Greeting according to role (silent — no TTS until panel is opened)
+    // Greeting is shown by _restoreHistory() once we know whether this is
+    // a brand-new session or a returning one (to avoid duplicate greetings).
+  }
+
+  _showGreeting() {
     if (this.role === 'owner') {
       this.addBubble('ai', `Hello! I am your dashboard voice assistant. You can say:
 - "Show stats"
@@ -198,12 +227,24 @@ class VoiceBot {
   }
 
   // ── Communication Helpers ─────────────────────────────────
-  addBubble(role, text, silent = false) {
+  addBubble(role, text, silent = false, log = true) {
     const div = document.createElement('div');
     div.className = `voice-bot-bubble ${role}`;
     div.innerHTML = text.replace(/\n/g, '<br>');
     this.messagesEl.appendChild(div);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+
+    this.conversationHistory.push({ role, message: text });
+
+    if (log) {
+      AI_PROVIDER.logMessage({
+        sessionId: this.sessionId,
+        botType:   this.botType,
+        userType:  this.role,
+        role,
+        message:   text,
+      });
+    }
 
     // Only speak if panel is open and not explicitly silenced
     if (role === 'ai' && this.isOpen && !silent) {
@@ -317,7 +358,9 @@ class VoiceBot {
         return;
       }
 
-      this.addBubble('ai', "I didn't quite catch that. You can say: 'Book a meeting', 'View my appointments', 'Reschedule', or 'Cancel my appointment'.");
+      // No built-in voice command matched — let the AI answer freely
+      const aiReply = await AI_PROVIDER.ask('visitor', text, this.conversationHistory);
+      this.addBubble('ai', aiReply);
       return;
     }
 
@@ -447,7 +490,9 @@ class VoiceBot {
         return;
       }
 
-      this.addBubble('ai', "Command not recognized. Try saying 'Show stats', 'Show requests', 'Approve request 1', or 'Add slot'.");
+      // No built-in voice command matched — let the AI answer freely
+      const aiReply = await AI_PROVIDER.ask('owner', text, this.conversationHistory);
+      this.addBubble('ai', aiReply);
       return;
     }
 
