@@ -15,8 +15,9 @@ class VoiceBot {
     this.role = document.getElementById('meetingForm') ? 'visitor' : 'owner';
 
     // Chat history persistence
-    this.botType = `voicebot_${this.role}`;
-    this.sessionId = AI_PROVIDER.getSessionId(this.botType);
+    this.sessionKey = `voicebot_${this.role}`; // localStorage key, keeps visitor/owner sessions separate
+    this.botType = 'voicebot';                  // must match the chat_messages CHECK constraint
+    this.sessionId = AI_PROVIDER.getSessionId(this.sessionKey);
     this.conversationHistory = [];
     this._historyRestored = false;
 
