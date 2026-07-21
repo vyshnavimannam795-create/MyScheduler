@@ -11,8 +11,9 @@ class AIAssistant {
     this.type       = type;         // 'visitor' | 'owner'
     this.history    = [];
     this.isLoading  = false;
-    this.botType    = `chatbot_${type}`;
-    this.sessionId  = AI_PROVIDER.getSessionId(this.botType);
+    this.sessionKey = `chatbot_${type}`;  // used for localStorage key, keeps visitor/owner sessions separate
+    this.botType    = 'chatbot';           // must match the chat_messages CHECK constraint
+    this.sessionId  = AI_PROVIDER.getSessionId(this.sessionKey);
     this._bindEvents();
     this._init();
   }
@@ -255,7 +256,7 @@ class AIAssistant {
   // ── New Chat ───────────────────────────────────────────────
   reset() {
     this.history = [];
-    this.sessionId = AI_PROVIDER.newSession(this.botType);
+    this.sessionId = AI_PROVIDER.newSession(this.sessionKey);
     if (this.messagesEl) this.messagesEl.innerHTML = '';
     if (this.chipsEl) this.chipsEl.style.display = '';
     this._renderGreeting();
