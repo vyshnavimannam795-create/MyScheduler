@@ -11,8 +11,21 @@ class AIAssistant {
     this.type       = type;         // 'visitor' | 'owner'
     this.history    = [];
     this.isLoading  = false;
+    this.botType    = `chatbot_${type}`;
+    this.sessionId  = AI_PROVIDER.getSessionId(this.botType);
     this._bindEvents();
-    this._renderGreeting();
+    this._init();
+  }
+
+  // ── Init: restore history from Supabase, or show greeting ──
+  async _init() {
+    const past = await AI_PROVIDER.loadHistory(this.sessionId, this.botType);
+    if (past.length > 0) {
+      if (this.chipsEl) this.chipsEl.style.display = 'none';
+      past.forEach(m => this._addBubble(m.role, m.message, { log: false }));
+    } else {
+      this._renderGreeting();
+    }
   }
 
   // ── Greeting ──────────────────────────────────────────────
@@ -109,7 +122,8 @@ class AIAssistant {
         return "Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).";
       }
 
-      return "I'm a scheduling assistant. Please click one of the suggested questions below or fill out the booking form on the left.";
+      // No built-in rule matched — fall back to the AI for open-ended questions
+      return await AI_PROVIDER.ask('visitor', text, this.history);
     }
 
     // ── Owner Reply Rules ──
@@ -188,20 +202,33 @@ class AIAssistant {
         }
       }
 
-      return "I can help you monitor requests, view today's schedule, suggest optimal slots, analyze workload, or find high-demand slots.";
+      // No built-in rule matched — fall back to the AI for open-ended questions
+      return await AI_PROVIDER.ask('owner', text, this.history);
     }
 
-    return "How can I assist you today?";
+    return await AI_PROVIDER.ask(this.type, text, this.history);
   }
 
   // ── Bubble Rendering ───────────────────────────────────────
-  _addBubble(role, text) {
+  _addBubble(role, text, { log = true } = {}) {
     const div = document.createElement('div');
     div.className = `ai-bubble ${role}`;
     // Replace newlines with <br> for neat display
     div.innerHTML = text.replace(/\n/g, '<br>');
     this.messagesEl?.appendChild(div);
     this._scrollBottom();
+
+    this.history.push({ role, message: text });
+
+    if (log) {
+      AI_PROVIDER.logMessage({
+        sessionId: this.sessionId,
+        botType:   this.botType,
+        userType:  this.type,
+        role,
+        message:   text,
+      });
+    }
   }
 
   _showTyping() {
@@ -228,6 +255,7 @@ class AIAssistant {
   // ── New Chat ───────────────────────────────────────────────
   reset() {
     this.history = [];
+    this.sessionId = AI_PROVIDER.newSession(this.botType);
     if (this.messagesEl) this.messagesEl.innerHTML = '';
     if (this.chipsEl) this.chipsEl.style.display = '';
     this._renderGreeting();
