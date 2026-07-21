@@ -23,6 +23,15 @@ const CONFIG = {
   OWNER_NAME: 'Vyshnavi Mannam',
   OWNER_INITIALS: 'VM',
 
+  // AI (Google Gemini) — powers open-ended answers in the chatbot & voicebot
+  // Setup steps:
+  // 1. Go to https://aistudio.google.com/apikey and create a free API key
+  // 2. Paste it below. NOTE: this key is used directly from the browser,
+  //    so it will be visible in devtools — fine for a demo/college project,
+  //    but for production use a Supabase Edge Function proxy instead.
+  GEMINI_API_KEY: 'AQ.Ab8RN6I-TmZzdAhb2F8Uugcq1UgyZbJQ3z2zKJHTzyZDyg6PrQ', // ← Paste your Gemini API key here
+  GEMINI_MODEL: 'gemini-2.0-flash',
+
   // Default hourly time slots (24-h format)
   DEFAULT_SLOT_TIMES: [
     { start: '09:00', end: '10:00' },
