@@ -9,21 +9,19 @@ class AIAssistant {
     this.sendBtn    = sendBtn;
     this.chipsEl    = chipsEl;
     this.type       = type;         // 'visitor' | 'owner'
-    this.history    = [];
+    this.history    = [];           // { role: 'user'|'ai', text } — used for AI conversational context
     this.isLoading  = false;
-    this.sessionKey = `chatbot_${type}`;  // used for localStorage key, keeps visitor/owner sessions separate
-    this.botType    = 'chatbot';           // must match the chat_messages CHECK constraint
-    this.sessionId  = AI_PROVIDER.getSessionId(this.sessionKey);
+    this.sessionId  = getOrCreateChatSessionId(this.type);
     this._bindEvents();
-    this._init();
+    this._initChat();
   }
 
-  // ── Init: restore history from Supabase, or show greeting ──
-  async _init() {
-    const past = await AI_PROVIDER.loadHistory(this.sessionId, this.botType);
-    if (past.length > 0) {
+  // ── Init: restore previous history from Supabase, or show greeting ─────
+  async _initChat() {
+    const rows = await this._loadHistory();
+    if (rows && rows.length > 0) {
+      rows.forEach(r => this._addBubble(r.role === 'user' ? 'user' : 'ai', r.message, { persist: false }));
       if (this.chipsEl) this.chipsEl.style.display = 'none';
-      past.forEach(m => this._addBubble(m.role, m.message, { log: false }));
     } else {
       this._renderGreeting();
     }
@@ -35,6 +33,36 @@ class AIAssistant {
       ? "👋 Hello! I can help you manage meetings.\nHere are some suggestions:"
       : "Hello! I'm your AI assistant.\nHow can I help you today?";
     this._addBubble('ai', msg);
+  }
+
+  // ── Supabase Chat History Persistence ───────────────────────
+  async _loadHistory() {
+    try {
+      const { data, error } = await db.from('ai_chat_history')
+        .select('*')
+        .eq('session_id', this.sessionId)
+        .eq('chat_type', this.type)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      (data || []).forEach(r => this.history.push({ role: r.role, text: r.message }));
+      return data || [];
+    } catch (err) {
+      console.warn('Could not load chat history:', err);
+      return [];
+    }
+  }
+
+  async _saveMessage(role, text) {
+    try {
+      await db.from('ai_chat_history').insert({
+        session_id: this.sessionId,
+        chat_type:  this.type,
+        role,          // 'user' | 'ai'
+        message:    text,
+      });
+    } catch (err) {
+      console.warn('Could not save chat message:', err);
+    }
   }
 
   // ── Event Binding ──────────────────────────────────────────
@@ -123,8 +151,8 @@ class AIAssistant {
         return "Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).";
       }
 
-      // No built-in rule matched — fall back to the AI for open-ended questions
-      return await AI_PROVIDER.ask('visitor', text, this.history);
+      // No predefined rule matched — let the AI answer the actual question.
+      return await this._getAIGeneratedReply(text);
     }
 
     // ── Owner Reply Rules ──
@@ -203,15 +231,44 @@ class AIAssistant {
         }
       }
 
-      // No built-in rule matched — fall back to the AI for open-ended questions
-      return await AI_PROVIDER.ask('owner', text, this.history);
+      // No predefined rule matched — let the AI answer the actual question.
+      return await this._getAIGeneratedReply(text);
     }
 
-    return await AI_PROVIDER.ask(this.type, text, this.history);
+    return await this._getAIGeneratedReply(text);
+  }
+
+  // ── Free-form AI reply via the /api/chat serverless proxy (Gemini, key kept server-side) ──
+  async _getAIGeneratedReply(text) {
+    try {
+      const systemContext = this.type === 'owner'
+        ? `You are the AI assistant inside "MyScheduler", a meeting scheduling web app, speaking to ${CONFIG.OWNER_NAME}, the app's owner, inside their private dashboard. Help with anything related to scheduling, managing meeting requests, slots, or general questions. Be concise and friendly. Today's date is ${getTodayStr()}.`
+        : `You are the AI assistant inside "MyScheduler", a meeting scheduling web app, speaking to a visitor who wants to book a meeting with ${CONFIG.OWNER_NAME}. Help with anything related to booking, scheduling, or general questions the visitor asks. Be concise and friendly. Today's date is ${getTodayStr()}.`;
+
+      // Include recent conversation for context (last 6 turns) + the current question
+      const recentMsgs = this.history.slice(-6).map(h => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: h.text,
+      }));
+      recentMsgs.push({ role: 'user', content: text });
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: systemContext, messages: recentMsgs }),
+      });
+
+      if (!res.ok) throw new Error(`Chat API error: ${res.status}`);
+      const data = await res.json();
+      return data.reply || "Sorry, I couldn't come up with an answer for that — could you try rephrasing?";
+    } catch (err) {
+      console.error('AI reply error:', err);
+      return "⚠️ I couldn't reach the AI service just now. Please try again in a moment.";
+    }
   }
 
   // ── Bubble Rendering ───────────────────────────────────────
-  _addBubble(role, text, { log = true } = {}) {
+  _addBubble(role, text, { persist = true } = {}) {
     const div = document.createElement('div');
     div.className = `ai-bubble ${role}`;
     // Replace newlines with <br> for neat display
@@ -219,16 +276,9 @@ class AIAssistant {
     this.messagesEl?.appendChild(div);
     this._scrollBottom();
 
-    this.history.push({ role, message: text });
-
-    if (log) {
-      AI_PROVIDER.logMessage({
-        sessionId: this.sessionId,
-        botType:   this.botType,
-        userType:  this.type,
-        role,
-        message:   text,
-      });
+    if (persist) {
+      this.history.push({ role, text });
+      this._saveMessage(role, text);
     }
   }
 
@@ -255,8 +305,8 @@ class AIAssistant {
 
   // ── New Chat ───────────────────────────────────────────────
   reset() {
-    this.history = [];
-    this.sessionId = AI_PROVIDER.newSession(this.sessionKey);
+    this.history   = [];
+    this.sessionId = newChatSessionId(this.type); // fresh session id → old history stays in Supabase, untouched
     if (this.messagesEl) this.messagesEl.innerHTML = '';
     if (this.chipsEl) this.chipsEl.style.display = '';
     this._renderGreeting();
