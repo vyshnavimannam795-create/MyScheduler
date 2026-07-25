@@ -9,21 +9,64 @@ class AIAssistant {
     this.sendBtn    = sendBtn;
     this.chipsEl    = chipsEl;
     this.type       = type;         // 'visitor' | 'owner'
-    this.history    = [];           // { role: 'user'|'ai', text } — used for AI conversational context
+    this.history    = [];
     this.isLoading  = false;
-    this.sessionId  = getOrCreateChatSessionId(this.type);
+    this.visitorEmail = '';         // set via setVisitorEmail() once known
+
+    // ── Chat session id (persists per browser tab, per dashboard type) ──
+    const storageKey = `chatSessionId_${this.type}`;
+    this.sessionId = sessionStorage.getItem(storageKey);
+    if (!this.sessionId) {
+      this.sessionId = crypto.randomUUID();
+      sessionStorage.setItem(storageKey, this.sessionId);
+    }
+
     this._bindEvents();
-    this._initChat();
+    this._loadHistoryThenGreet();
   }
 
-  // ── Init: restore previous history from Supabase, or show greeting ─────
-  async _initChat() {
-    const rows = await this._loadHistory();
-    if (rows && rows.length > 0) {
-      rows.forEach(r => this._addBubble(r.role === 'user' ? 'user' : 'ai', r.message, { persist: false }));
-      if (this.chipsEl) this.chipsEl.style.display = 'none';
-    } else {
-      this._renderGreeting();
+  // ── Allow the app to tell the assistant who the visitor is ──
+  setVisitorEmail(email) {
+    this.visitorEmail = email || '';
+  }
+
+  // ── Load past chat history from Supabase, or show greeting if none ──
+  async _loadHistoryThenGreet() {
+    try {
+      const { data, error } = await db
+        .from('chat_history')
+        .select('*')
+        .eq('session_id', this.sessionId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        data.forEach(row => {
+          this._addBubble(row.role === 'assistant' ? 'ai' : 'user', row.message, false);
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Could not load chat history:', err);
+    }
+    // No history found (or load failed) — show the greeting instead
+    this._renderGreeting();
+  }
+
+  // ── Save a single message to Supabase ──
+  async _saveMessage(role, message) {
+    try {
+      const { error } = await db.from('chat_history').insert([{
+        session_id: this.sessionId,
+        dashboard: this.type,
+        visitor_email: this.visitorEmail,
+        role: role,          // 'user' | 'assistant'
+        message: message
+      }]);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Could not save chat message:', err);
     }
   }
 
@@ -32,37 +75,7 @@ class AIAssistant {
     const msg = this.type === 'owner'
       ? "👋 Hello! I can help you manage meetings.\nHere are some suggestions:"
       : "Hello! I'm your AI assistant.\nHow can I help you today?";
-    this._addBubble('ai', msg);
-  }
-
-  // ── Supabase Chat History Persistence ───────────────────────
-  async _loadHistory() {
-    try {
-      const { data, error } = await db.from('ai_chat_history')
-        .select('*')
-        .eq('session_id', this.sessionId)
-        .eq('chat_type', this.type)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      (data || []).forEach(r => this.history.push({ role: r.role, text: r.message }));
-      return data || [];
-    } catch (err) {
-      console.warn('Could not load chat history:', err);
-      return [];
-    }
-  }
-
-  async _saveMessage(role, text) {
-    try {
-      await db.from('ai_chat_history').insert({
-        session_id: this.sessionId,
-        chat_type:  this.type,
-        role,          // 'user' | 'ai'
-        message:    text,
-      });
-    } catch (err) {
-      console.warn('Could not save chat message:', err);
-    }
+    this._addBubble('ai', msg, true);
   }
 
   // ── Event Binding ──────────────────────────────────────────
@@ -98,7 +111,7 @@ class AIAssistant {
 
     this.inputEl.value = '';
 
-    this._addBubble('user', text);
+    this._addBubble('user', text, true);
     this._showTyping();
     this.isLoading = true;
     if (this.sendBtn) this.sendBtn.disabled = true;
@@ -108,10 +121,11 @@ class AIAssistant {
       await new Promise(r => setTimeout(r, 600));
       const reply = await this._getPredefinedReply(text);
       this._removeTyping();
-      this._addBubble('ai', reply);
+      this._addBubble('ai', reply, true);
     } catch (err) {
       this._removeTyping();
-      this._addBubble('ai', '⚠️ Sorry, I encountered an issue. Please try again.');
+      const errMsg = '⚠️ Sorry, I encountered an issue. Please try again.';
+      this._addBubble('ai', errMsg, true);
       console.error('Bot error:', err);
     } finally {
       this.isLoading = false;
@@ -151,8 +165,7 @@ class AIAssistant {
         return "Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).";
       }
 
-      // No predefined rule matched — let the AI answer the actual question.
-      return await this._getAIGeneratedReply(text);
+      return "I'm a scheduling assistant. Please click one of the suggested questions below or fill out the booking form on the left.";
     }
 
     // ── Owner Reply Rules ──
@@ -231,44 +244,16 @@ class AIAssistant {
         }
       }
 
-      // No predefined rule matched — let the AI answer the actual question.
-      return await this._getAIGeneratedReply(text);
+      return "I can help you monitor requests, view today's schedule, suggest optimal slots, analyze workload, or find high-demand slots.";
     }
 
-    return await this._getAIGeneratedReply(text);
-  }
-
-  // ── Free-form AI reply via the /api/chat serverless proxy (Gemini, key kept server-side) ──
-  async _getAIGeneratedReply(text) {
-    try {
-      const systemContext = this.type === 'owner'
-        ? `You are the AI assistant inside "MyScheduler", a meeting scheduling web app, speaking to ${CONFIG.OWNER_NAME}, the app's owner, inside their private dashboard. Help with anything related to scheduling, managing meeting requests, slots, or general questions. Be concise and friendly. Today's date is ${getTodayStr()}.`
-        : `You are the AI assistant inside "MyScheduler", a meeting scheduling web app, speaking to a visitor who wants to book a meeting with ${CONFIG.OWNER_NAME}. Help with anything related to booking, scheduling, or general questions the visitor asks. Be concise and friendly. Today's date is ${getTodayStr()}.`;
-
-      // Include recent conversation for context (last 6 turns) + the current question
-      const recentMsgs = this.history.slice(-6).map(h => ({
-        role: h.role === 'user' ? 'user' : 'assistant',
-        content: h.text,
-      }));
-      recentMsgs.push({ role: 'user', content: text });
-
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system: systemContext, messages: recentMsgs }),
-      });
-
-      if (!res.ok) throw new Error(`Chat API error: ${res.status}`);
-      const data = await res.json();
-      return data.reply || "Sorry, I couldn't come up with an answer for that — could you try rephrasing?";
-    } catch (err) {
-      console.error('AI reply error:', err);
-      return "⚠️ I couldn't reach the AI service just now. Please try again in a moment.";
-    }
+    return "How can I assist you today?";
   }
 
   // ── Bubble Rendering ───────────────────────────────────────
-  _addBubble(role, text, { persist = true } = {}) {
+  // persist: whether this bubble should be saved to chat_history.
+  // Set to false when re-rendering bubbles loaded FROM history (avoids duplicate saves).
+  _addBubble(role, text, persist = true) {
     const div = document.createElement('div');
     div.className = `ai-bubble ${role}`;
     // Replace newlines with <br> for neat display
@@ -277,8 +262,8 @@ class AIAssistant {
     this._scrollBottom();
 
     if (persist) {
-      this.history.push({ role, text });
-      this._saveMessage(role, text);
+      const dbRole = role === 'ai' ? 'assistant' : 'user';
+      this._saveMessage(dbRole, text);
     }
   }
 
@@ -305,10 +290,15 @@ class AIAssistant {
 
   // ── New Chat ───────────────────────────────────────────────
   reset() {
-    this.history   = [];
-    this.sessionId = newChatSessionId(this.type); // fresh session id → old history stays in Supabase, untouched
+    this.history = [];
     if (this.messagesEl) this.messagesEl.innerHTML = '';
     if (this.chipsEl) this.chipsEl.style.display = '';
+
+    // Start a fresh session so old history doesn't reload next time
+    const storageKey = `chatSessionId_${this.type}`;
+    this.sessionId = crypto.randomUUID();
+    sessionStorage.setItem(storageKey, this.sessionId);
+
     this._renderGreeting();
   }
 }
