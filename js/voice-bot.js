@@ -14,13 +14,6 @@ class VoiceBot {
     // Check role based on DOM elements
     this.role = document.getElementById('meetingForm') ? 'visitor' : 'owner';
 
-    // Chat history persistence
-    this.sessionKey = `voicebot_${this.role}`; // localStorage key, keeps visitor/owner sessions separate
-    this.botType = 'voicebot';                  // must match the chat_messages CHECK constraint
-    this.sessionId = AI_PROVIDER.getSessionId(this.sessionKey);
-    this.conversationHistory = [];
-    this._historyRestored = false;
-
     // Conversation State Machine
     this.state = {
       intent: null, // 'book' | 'view' | 'cancel' | 'reschedule' | 'approve' | 'reject' | 'add_slot' | 'delete_slot'
@@ -40,25 +33,6 @@ class VoiceBot {
 
     this.initUI();
     this.initSpeech();
-    this._restoreHistory();
-  }
-
-  // ── Restore prior conversation from Supabase, if any ───────
-  async _restoreHistory() {
-    try {
-      const past = await AI_PROVIDER.loadHistory(this.sessionId, this.botType);
-      if (past.length > 0) {
-        this.messagesEl.innerHTML = '';
-        this.conversationHistory = [];
-        past.forEach(m => this.addBubble(m.role, m.message, true, false));
-      } else {
-        this._showGreeting();
-      }
-      this._historyRestored = true;
-    } catch (err) {
-      console.warn('Voice bot history restore failed:', err);
-      this._showGreeting();
-    }
   }
 
   // ── UI Initialization ──────────────────────────────────────
@@ -69,7 +43,8 @@ class VoiceBot {
       speakerOn: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
       speakerMuted: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`,
       close: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-      send: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`
+      send: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
+      clear: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`
     };
     this.SVG_ICONS = SVG_ICONS;
 
@@ -90,6 +65,7 @@ class VoiceBot {
           <span class="voice-bot-title">${this.role === 'owner' ? 'Dashboard Voice AI' : 'Voice Assistant AI'}</span>
         </div>
         <div class="voice-bot-header-btns">
+          <button class="voice-bot-header-btn" id="voiceBotClearBtn" title="Clear conversation">${SVG_ICONS.clear}</button>
           <button class="voice-bot-header-btn" id="voiceBotMuteBtn" title="Mute/Unmute Responses">${SVG_ICONS.speakerOn}</button>
           <button class="voice-bot-header-btn" id="voiceBotCloseBtn" title="Close Panel">${SVG_ICONS.close}</button>
         </div>
@@ -115,23 +91,26 @@ class VoiceBot {
     this.sendBtnEl = document.getElementById('voiceBotSendBtn');
     this.muteBtnEl = document.getElementById('voiceBotMuteBtn');
     this.closeBtnEl = document.getElementById('voiceBotCloseBtn');
+    this.clearBtnEl = document.getElementById('voiceBotClearBtn');
     this.statusEl = document.getElementById('voiceBotStatus');
 
     // Event listeners
     this.launcherEl.addEventListener('click', () => this.togglePanel(true));
     this.closeBtnEl.addEventListener('click', () => this.togglePanel(false));
     this.muteBtnEl.addEventListener('click', () => this.toggleMute());
+    this.clearBtnEl.addEventListener('click', () => this.clearChat());
     this.sendBtnEl.addEventListener('click', () => this.handleTextInput());
     this.inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.handleTextInput();
     });
     this.micBtnEl.addEventListener('click', () => this.toggleVoiceListening());
 
-    // Greeting is shown by _restoreHistory() once we know whether this is
-    // a brand-new session or a returning one (to avoid duplicate greetings).
+    // Greeting according to role (silent — no TTS until panel is opened)
+    this.renderGreeting();
   }
 
-  _showGreeting() {
+  // ── Greeting (also reused by Clear) ───────────────────────
+  renderGreeting() {
     if (this.role === 'owner') {
       this.addBubble('ai', `Hello! I am your dashboard voice assistant. You can say:
 - "Show stats"
@@ -143,6 +122,15 @@ class VoiceBot {
     } else {
       this.addBubble('ai', "Hello! I am your voice-enabled scheduler assistant. You can say: 'Book a meeting', 'View my appointments', 'Reschedule a meeting', or 'Cancel my appointment'. How can I help you today?", true);
     }
+  }
+
+  // ── Clear conversation (mirrors the normal AI Assistant's "Clear") ────
+  clearChat() {
+    this.stopSpeaking();
+    if (this.recognition && this.isListening) this.recognition.stop();
+    this.resetState();
+    if (this.messagesEl) this.messagesEl.innerHTML = '';
+    this.renderGreeting();
   }
 
   // ── Speech API Setup ──────────────────────────────────────
@@ -228,24 +216,12 @@ class VoiceBot {
   }
 
   // ── Communication Helpers ─────────────────────────────────
-  addBubble(role, text, silent = false, log = true) {
+  addBubble(role, text, silent = false) {
     const div = document.createElement('div');
     div.className = `voice-bot-bubble ${role}`;
     div.innerHTML = text.replace(/\n/g, '<br>');
     this.messagesEl.appendChild(div);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
-
-    this.conversationHistory.push({ role, message: text });
-
-    if (log) {
-      AI_PROVIDER.logMessage({
-        sessionId: this.sessionId,
-        botType:   this.botType,
-        userType:  this.role,
-        role,
-        message:   text,
-      });
-    }
 
     // Only speak if panel is open and not explicitly silenced
     if (role === 'ai' && this.isOpen && !silent) {
@@ -359,9 +335,7 @@ class VoiceBot {
         return;
       }
 
-      // No built-in voice command matched — let the AI answer freely
-      const aiReply = await AI_PROVIDER.ask('visitor', text, this.conversationHistory);
-      this.addBubble('ai', aiReply);
+      this.addBubble('ai', "I didn't quite catch that. You can say: 'Book a meeting', 'View my appointments', 'Reschedule', or 'Cancel my appointment'.");
       return;
     }
 
@@ -491,9 +465,7 @@ class VoiceBot {
         return;
       }
 
-      // No built-in voice command matched — let the AI answer freely
-      const aiReply = await AI_PROVIDER.ask('owner', text, this.conversationHistory);
-      this.addBubble('ai', aiReply);
+      this.addBubble('ai', "Command not recognized. Try saying 'Show stats', 'Show requests', 'Approve request 1', or 'Add slot'.");
       return;
     }
 
