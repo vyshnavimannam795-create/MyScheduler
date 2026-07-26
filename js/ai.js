@@ -34,16 +34,17 @@ class AIAssistant {
   async _loadHistoryThenGreet() {
     try {
       const { data, error } = await db
-        .from('chat_history')
+        .from('chat_messages')
         .select('*')
         .eq('session_id', this.sessionId)
+        .eq('bot_type', 'chatbot')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
         data.forEach(row => {
-          this._addBubble(row.role === 'assistant' ? 'ai' : 'user', row.message, false);
+          this._addBubble(row.role === 'ai' ? 'ai' : 'user', row.message, false);
         });
         return;
       }
@@ -57,12 +58,12 @@ class AIAssistant {
   // ── Save a single message to Supabase ──
   async _saveMessage(role, message) {
     try {
-      const { error } = await db.from('chat_history').insert([{
+      const { error } = await db.from('chat_messages').insert([{
         session_id: this.sessionId,
-        dashboard: this.type,
-        visitor_email: this.visitorEmail,
-        role: role,          // 'user' | 'assistant'
-        message: message
+        bot_type:   'chatbot',
+        user_type:  this.type,   // 'visitor' | 'owner'
+        role:       role,        // 'user' | 'ai'
+        message:    message,
       }]);
       if (error) throw error;
     } catch (err) {
@@ -286,8 +287,8 @@ class AIAssistant {
     this._scrollBottom();
 
     if (persist) {
-      const dbRole = role === 'ai' ? 'assistant' : 'user';
-      this._saveMessage(dbRole, text);
+      // chat_messages.role only allows 'user' | 'ai' — no remapping needed
+      this._saveMessage(role, text);
     }
   }
 
