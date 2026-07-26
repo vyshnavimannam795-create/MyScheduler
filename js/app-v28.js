@@ -468,7 +468,106 @@ function validateDesc() {
   helper.className   = len >= 25 ? 'helper-text' : 'helper-text error-text';
 }
 
-/* ── SUBMIT MEETING REQUEST ──────────────────────────────────── */
+/* ── CORE BOOKING FUNCTION ────────────────────────────────────
+   Single source of truth for creating a meeting request. Both the
+   booking form (below) and the AI agent (ai-provider.js) call this
+   — never duplicate this insert/email logic elsewhere.
+─────────────────────────────────────────────────────────────── */
+async function createBookingCore({ name, email, title, desc, date, start, end }) {
+  if (!name)  throw new Error('Name is required.');
+  if (!email || !email.includes('@')) throw new Error('A valid email is required.');
+  if (!title) throw new Error('Meeting title is required.');
+  if (!desc || desc.length < 25) throw new Error('Description must be at least 25 characters.');
+  if (!date)  throw new Error('Date is required.');
+  if (!start || !end) throw new Error('Start and end time are required.');
+  if (start >= end) throw new Error('End time must be after start time.');
+
+  const s = start.length === 5 ? start + ':00' : start;
+  const e = end.length === 5   ? end   + ':00' : end;
+
+  // Check for date/time conflict
+  const { data: existing } = await db.from('meetings')
+    .select('id').eq('date', date).eq('start_time', s)
+    .in('status', ['approved']);
+
+  if (existing && existing.length > 0) {
+    throw new Error('That time is already booked. Please choose another slot.');
+  }
+
+  const payload = {
+    visitor_name: name, email, meeting_title: title, description: desc,
+    date, start_time: s, end_time: e, status: 'pending', visitor_message: desc,
+  };
+
+  const { data: inserted, error } = await db.from('meetings').insert(payload).select().single();
+  if (error) throw error;
+
+  try {
+    await db.from('activity_log').insert({
+      action: 'requested', description: `${name} requested a meeting`, actor: 'visitor',
+    });
+  } catch (err) {
+    console.warn('Activity log err:', err);
+  }
+
+  await sendSystemEmail({
+    to: CONFIG.OWNER_EMAIL,
+    subject: `📅 New Meeting Request from ${name}`,
+    message: `
+Hello Vyshnavi!
+
+You have a new meeting request on MyScheduler.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VISITOR DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Name    : ${name}
+Email   : ${email}
+
+MEETING DETAILS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title   : ${title}
+Date    : ${formatDate(date)}
+Time    : ${formatTimeRange(s, e)}
+Description:
+${desc}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Please log in to your dashboard to approve or reject this request.
+
+Dashboard: ${window.location.origin}/owner.html
+    `.trim()
+  });
+
+  await sendSystemEmail({
+    to: email,
+    subject: `📅 Meeting Request Received — MyScheduler`,
+    message: `
+Hello ${name},
+
+Your meeting request has been successfully sent to Vyshnavi Mannam.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEETING SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Title   : ${title}
+Date    : ${formatDate(date)}
+Time    : ${formatTimeRange(s, e)}
+
+Status  : Pending
+
+Your request is sent to the Owner and the current status is pending. We will notify you once Vyshnavi reviews and updates your request.
+
+Thank you,
+MyScheduler System
+    `.trim()
+  });
+
+  return inserted;
+}
+window.createBookingCore = createBookingCore;
+
+/* ── SUBMIT MEETING REQUEST (form wrapper around createBookingCore) ─ */
 async function handleMeetingSubmit(e) {
   e.preventDefault();
   clearFieldErrors();
@@ -494,101 +593,12 @@ async function handleMeetingSubmit(e) {
 
   if (hasError) return;
 
-  // Check for date/time conflict
-  const { data: existing } = await db.from('meetings')
-    .select('id').eq('date', date).eq('start_time', start + ':00')
-    .in('status', ['approved']);
-
-  if (existing && existing.length > 0) {
-    showToast('That time is already booked. Please choose another slot.', 'error');
-    return;
-  }
-
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Submitting…';
 
   try {
-    const payload = {
-      visitor_name:    name,
-      email:           email,
-      meeting_title:   title,
-      description:     desc,
-      date:            date,
-      start_time:      start + ':00',
-      end_time:        end   + ':00',
-      status:          'pending',
-      visitor_message: desc,
-    };
-
-    const { error } = await db.from('meetings').insert(payload);
-    if (error) throw error;
-
-    // Log activity
-    try {
-      await db.from('activity_log').insert({
-        action:      'requested',
-        description: `${name} requested a meeting`,
-        actor:       'visitor',
-      });
-    } catch (e) {
-      console.warn('Activity log err:', e);
-    }
-
-    // Send email notification to owner (vyshnavimannam795@gmail.com)
-    await sendSystemEmail({
-      to: CONFIG.OWNER_EMAIL,
-      subject: `📅 New Meeting Request from ${name}`,
-      message: `
-Hello Vyshnavi!
-
-You have a new meeting request on MyScheduler.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-VISITOR DETAILS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Name    : ${name}
-Email   : ${email}
-
-MEETING DETAILS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Title   : ${title}
-Date    : ${formatDate(date)}
-Time    : ${formatTimeRange(start + ':00', end + ':00')}
-Description:
-${desc}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Please log in to your dashboard to approve or reject this request.
-
-Dashboard: ${window.location.origin}/owner.html
-      `.trim()
-    });
-
-    // Send confirmation email to visitor (sends via EmailJS if configured)
-    await sendSystemEmail({
-      to: email,
-      subject: `📅 Meeting Request Received — MyScheduler`,
-      message: `
-Hello ${name},
-
-Your meeting request has been successfully sent to Vyshnavi Mannam.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MEETING SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Title   : ${title}
-Date    : ${formatDate(date)}
-Time    : ${formatTimeRange(start + ':00', end + ':00')}
-
-Status  : Pending
-
-Your request is sent to the Owner and the current status is pending. We will notify you once Vyshnavi reviews and updates your request.
-
-Thank you,
-MyScheduler System
-      `.trim()
-    });
+    await createBookingCore({ name, email, title, desc, date, start, end });
 
     showToast('Meeting request submitted! You\'ll hear back soon.', 'success');
     document.getElementById('meetingForm').reset();
@@ -690,19 +700,20 @@ function subscribeRealtime() {
     .subscribe();
 }
 
-async function cancelMeetingByVisitor(meetingId) {
-  const reason = prompt("Please enter a reason for cancelling this meeting (optional):");
-  if (reason === null) return; // User cancelled prompt
-  
+/* ── CORE CANCEL FUNCTION ─────────────────────────────────────
+   Single source of truth for a visitor cancelling their own
+   meeting. Called by the prompt()-based UI wrapper below and by
+   the AI agent (ai-provider.js).
+─────────────────────────────────────────────────────────────── */
+async function cancelBookingCoreVisitor(meetingId, reason) {
   const { data: meeting, error: fetchErr } = await db.from('meetings').select('*').eq('id', meetingId).single();
-  if (fetchErr || !meeting) {
-    showToast('Error finding meeting: ' + (fetchErr?.message || 'Not found'), 'error');
-    return;
+  if (fetchErr || !meeting) throw new Error(fetchErr?.message || 'Meeting not found.');
+  if (!['pending', 'approved'].includes(meeting.status)) {
+    throw new Error(`This meeting is already "${meeting.status}" — nothing to cancel.`);
   }
 
   const oldStatus = meeting.status;
-  
-  // Update meeting status
+
   const { error: updateErr } = await db.from('meetings')
     .update({
       status: 'cancelled',
@@ -710,11 +721,8 @@ async function cancelMeetingByVisitor(meetingId) {
       cancellation_reason: reason || 'Cancelled by visitor'
     })
     .eq('id', meetingId);
-  
-  if (updateErr) {
-    showToast('Error cancelling meeting: ' + updateErr.message, 'error');
-    return;
-  }
+
+  if (updateErr) throw updateErr;
 
   // If it was approved, reopen the slot
   if (oldStatus === 'approved') {
@@ -728,7 +736,6 @@ async function cancelMeetingByVisitor(meetingId) {
     }
   }
 
-  // Log to activity log
   try {
     await db.from('activity_log').insert({
       action: 'cancelled',
@@ -740,13 +747,13 @@ async function cancelMeetingByVisitor(meetingId) {
     console.warn('Log activity error:', e);
   }
 
-  // Send email notifications
   const dateStr = formatDate(meeting.date);
   const timeStr = formatTimeRange(meeting.start_time, meeting.end_time);
 
-  // Email to Owner
-  const ownerSubject = `MyScheduler Action: Visitor Cancelled meeting with ${meeting.visitor_name}`;
-  const ownerMsg = `
+  await sendSystemEmail({
+    to: CONFIG.OWNER_EMAIL,
+    subject: `MyScheduler Action: Visitor Cancelled meeting with ${meeting.visitor_name}`,
+    message: `
 Hello Vyshnavi,
 
 The meeting request from ${meeting.visitor_name} has been CANCELLED by the visitor.
@@ -761,17 +768,13 @@ Reason : ${reason || 'Cancelled by visitor'}
 By     : visitor
 
 — MyScheduler System
-  `.trim();
-
-  await sendSystemEmail({
-    to: CONFIG.OWNER_EMAIL,
-    subject: ownerSubject,
-    message: ownerMsg
+    `.trim()
   });
 
-  // Email to Visitor
-  const visitorSubject = `MyScheduler: Meeting Cancelled`;
-  const visitorMsg = `
+  await sendSystemEmail({
+    to: meeting.email,
+    subject: `MyScheduler: Meeting Cancelled`,
+    message: `
 Hello ${meeting.visitor_name},
 
 This email confirms that your meeting request has been successfully CANCELLED.
@@ -790,17 +793,27 @@ Booking Page: ${window.location.origin}/index.html
 
 Thank you,
 MyScheduler System
-  `.trim();
-
-  await sendSystemEmail({
-    to: meeting.email,
-    subject: visitorSubject,
-    message: visitorMsg
+    `.trim()
   });
 
+  return meeting;
+}
+window.cancelBookingCoreVisitor = cancelBookingCoreVisitor;
+
+/* ── UI WRAPPER (keeps the prompt() dialog for manual clicks) ─── */
+async function cancelMeetingByVisitor(meetingId) {
+  const reason = prompt("Please enter a reason for cancelling this meeting (optional):");
+  if (reason === null) return; // User cancelled prompt
+
+  try {
+    await cancelBookingCoreVisitor(meetingId, reason);
+  } catch (err) {
+    showToast('Error cancelling meeting: ' + err.message, 'error');
+    return;
+  }
+
   showToast('Meeting cancelled successfully.', 'success');
-  
-  // Refresh visitor view
+
   const emailInput = document.getElementById('visitorEmail').value.trim();
   if (emailInput) {
     await loadPastRequests(emailInput);
@@ -808,4 +821,3 @@ MyScheduler System
 }
 
 window.cancelMeetingByVisitor = cancelMeetingByVisitor;
-
