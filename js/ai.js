@@ -133,10 +133,14 @@ class AIAssistant {
     }
   }
 
-  // ── Predefined Chat Bot Rules ──────────────────────────────
+  // ── Predefined Chat Bot Rules (fast paths) + AI agent fallback ─
   async _getPredefinedReply(text) {
     const query = text.toLowerCase().trim();
     const today = getTodayStr();
+
+    // Remember this turn so the AI agent has conversational context
+    this.history.push({ role: 'user', message: text });
+    const pushAiReply = (reply) => { this.history.push({ role: 'ai', message: reply }); return reply; };
 
     // ── Visitor Reply Rules ──
     if (this.type === 'visitor') {
@@ -165,7 +169,17 @@ class AIAssistant {
         return "Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).";
       }
 
-      return "I'm a scheduling assistant. Please click one of the suggested questions below or fill out the booking form on the left.";
+      // No fast-path rule matched — hand off to the full AI agent
+      // (Gemini + tools: it can look up slots, book, and cancel for real)
+      if (typeof AI_PROVIDER !== 'undefined') {
+        try {
+          const reply = await AI_PROVIDER.ask('visitor', text, this.history);
+          return pushAiReply(reply);
+        } catch (e) {
+          console.error('AI_PROVIDER.ask failed:', e);
+        }
+      }
+      return pushAiReply("I'm a scheduling assistant. Please click one of the suggested questions below or fill out the booking form on the left.");
     }
 
     // ── Owner Reply Rules ──
@@ -244,10 +258,20 @@ class AIAssistant {
         }
       }
 
-      return "I can help you monitor requests, view today's schedule, suggest optimal slots, analyze workload, or find high-demand slots.";
+      // No fast-path rule matched — hand off to the full AI agent
+      // (Gemini + tools: it can approve/reject/reschedule/cancel/etc. for real)
+      if (typeof AI_PROVIDER !== 'undefined') {
+        try {
+          const reply = await AI_PROVIDER.ask('owner', text, this.history);
+          return pushAiReply(reply);
+        } catch (e) {
+          console.error('AI_PROVIDER.ask failed:', e);
+        }
+      }
+      return pushAiReply("I can help you monitor requests, view today's schedule, suggest optimal slots, analyze workload, or find high-demand slots.");
     }
 
-    return "How can I assist you today?";
+    return pushAiReply("How can I assist you today?");
   }
 
   // ── Bubble Rendering ───────────────────────────────────────
