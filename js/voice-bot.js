@@ -31,6 +31,10 @@ class VoiceBot {
       }
     };
 
+    // Turn history fed to the AI agent (Gemini) when a spoken command
+    // doesn't match one of the deterministic flows below.
+    this.history = [];
+
     this.initUI();
     this.initSpeech();
   }
@@ -304,6 +308,30 @@ class VoiceBot {
     }
   }
 
+  // ── AI Agent fallback (Gemini + tools) for anything the
+  //    deterministic flows above don't recognize ──────────────
+  async askAgentFallback(text) {
+    this.history.push({ role: 'user', message: text });
+    if (typeof AI_PROVIDER === 'undefined') {
+      const msg = this.role === 'owner'
+        ? "Command not recognized. Try saying 'Show stats', 'Show requests', 'Approve request 1', or 'Add slot'."
+        : "I didn't quite catch that. You can say: 'Book a meeting', 'View my appointments', 'Reschedule', or 'Cancel my appointment'.";
+      this.addBubble('ai', msg);
+      return;
+    }
+    try {
+      const reply = await AI_PROVIDER.ask(this.role, text, this.history);
+      this.history.push({ role: 'ai', message: reply });
+      this.addBubble('ai', reply);
+      // The agent may have approved/rejected/rescheduled/etc. behind the
+      // scenes — refresh the dashboard so the owner sees it immediately.
+      if (this.role === 'owner') this.refreshOwnerUI();
+    } catch (err) {
+      console.error('Voice agent fallback failed:', err);
+      this.addBubble('ai', "⚠️ Sorry, I couldn't process that just now.");
+    }
+  }
+
   // ── VISITOR FLOWS ─────────────────────────────────────────
   async processVisitorInput(input, text) {
     if (!this.state.intent) {
@@ -335,7 +363,9 @@ class VoiceBot {
         return;
       }
 
-      this.addBubble('ai', "I didn't quite catch that. You can say: 'Book a meeting', 'View my appointments', 'Reschedule', or 'Cancel my appointment'.");
+      // No deterministic flow matched — let the AI agent try (it can
+      // handle one-shot natural language booking/cancel/lookup requests).
+      await this.askAgentFallback(text);
       return;
     }
 
@@ -465,7 +495,10 @@ class VoiceBot {
         return;
       }
 
-      this.addBubble('ai', "Command not recognized. Try saying 'Show stats', 'Show requests', 'Approve request 1', or 'Add slot'.");
+      // No deterministic flow matched — let the AI agent try (it can
+      // handle free-form requests like "who booked tomorrow" or
+      // "reschedule John's meeting to Friday").
+      await this.askAgentFallback(text);
       return;
     }
 
