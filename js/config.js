@@ -23,9 +23,11 @@ const CONFIG = {
   OWNER_NAME: 'Vyshnavi Mannam',
   OWNER_INITIALS: 'VM',
 
-  // AI Assistant — free-form answers are handled by the /api/chat serverless
-  // function (see api/chat.js). The Gemini API key lives server-side as a
-  // Vercel environment variable (GEMINI_API_KEY), never in this file.
+  // AI Assistant — Gemini API key (client-side; visible to anyone who views
+  // source or the GitHub repo). Fine for a demo/college project; rotate this
+  // key at https://aistudio.google.com/apikey if it's ever a real concern.
+  GEMINI_API_KEY: 'AQ.Ab8RN6IC1zt9fa_OZ6guuvPLxPQVJ8y0TcxD4Ro_Dy6oszXwEg',
+  GEMINI_MODEL: 'gemini-2.0-flash',
 
   // Default hourly time slots (24-h format)
   DEFAULT_SLOT_TIMES: [
