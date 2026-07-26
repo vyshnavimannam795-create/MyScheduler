@@ -26,7 +26,7 @@ const CONFIG = {
   // AI Assistant — Gemini API key (client-side; visible to anyone who views
   // source or the GitHub repo). Fine for a demo/college project; rotate this
   // key at https://aistudio.google.com/apikey if it's ever a real concern.
-  GEMINI_API_KEY: 'AQ.Ab8RN6IC1zt9fa_OZ6guuvPLxPQVJ8y0TcxD4Ro_Dy6oszXwEg',
+  GEMINI_API_KEY: 'AQ.Ab8RN6KaNLDaAYgCV-M0kNMMZjFXjWnEhrKbLPWM56tWQiWhGA',
   GEMINI_MODEL: 'gemini-2.0-flash',
 
   // Default hourly time slots (24-h format)
