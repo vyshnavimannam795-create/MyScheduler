@@ -415,17 +415,129 @@ function renderSelectedMeeting(m) {
   }
 }
 
-/* ── QUICK ACTIONS ──────────────────────────────────────────── */
+/* ── CORE ACTION FUNCTIONS ────────────────────────────────────
+   Single source of truth for every meeting/slot mutation.
+   Both the dashboard UI (below) and the AI agent (ai-provider.js)
+   call these — never duplicate this logic elsewhere.
+─────────────────────────────────────────────────────────────── */
+async function approveMeetingCore(id, remarks = '') {
+  const meeting = allMeetings.find(m => m.id === id);
+  if (!meeting) throw new Error('Meeting not found.');
+  if (meeting.status !== 'pending') throw new Error(`Meeting is already "${meeting.status}", not pending.`);
+
+  await updateMeetingStatus(id, 'approved', { owner_remarks: remarks });
+  try {
+    await db.from('slots').update({ status: 'booked' })
+      .eq('date', meeting.date).eq('start_time', meeting.start_time).eq('status', 'available');
+  } catch (e) { console.warn('Slot update err:', e); }
+  logActivity('approved', meeting.visitor_name + ' meeting approved', id);
+  return meeting;
+}
+
+async function rejectMeetingCore(id) {
+  const meeting = allMeetings.find(m => m.id === id);
+  if (!meeting) throw new Error('Meeting not found.');
+  if (meeting.status !== 'pending') throw new Error(`Meeting is already "${meeting.status}", not pending.`);
+
+  await updateMeetingStatus(id, 'rejected');
+  logActivity('rejected', meeting.visitor_name + ' meeting rejected', id);
+  return meeting;
+}
+
+async function cancelMeetingCore(id, reason) {
+  const meeting = allMeetings.find(m => m.id === id);
+  if (!meeting) throw new Error('Meeting not found.');
+  if (!reason || !reason.trim()) throw new Error('A cancellation reason is required.');
+  if (!['pending', 'approved'].includes(meeting.status)) throw new Error(`Meeting is already "${meeting.status}" — nothing to cancel.`);
+
+  await updateMeetingStatus(id, 'cancelled', { cancellation_reason: reason, cancelled_by: 'owner' });
+  try {
+    await db.from('slots').update({ status: 'available' })
+      .eq('date', meeting.date).eq('start_time', meeting.start_time).eq('status', 'booked');
+  } catch (e) { console.warn('Slot update err:', e); }
+  logActivity('cancelled', meeting.visitor_name + ' meeting cancelled', id);
+  return meeting;
+}
+
+async function rescheduleMeetingCore(id, newDate, newStart, newEnd, reason = '') {
+  const meeting = allMeetings.find(m => m.id === id);
+  if (!meeting) throw new Error('Meeting not found.');
+  if (!newDate || !newStart || !newEnd) throw new Error('New date, start time, and end time are all required.');
+
+  const s = newStart.length === 5 ? newStart + ':00' : newStart;
+  const e = newEnd.length === 5   ? newEnd   + ':00' : newEnd;
+
+  await updateMeetingStatus(id, 'pending', {
+    new_date: newDate, new_start_time: s, new_end_time: e, reschedule_reason: reason,
+  });
+  logActivity('rescheduled', meeting.visitor_name + ' meeting rescheduled', id);
+  return meeting;
+}
+
+async function completeMeetingCore(id, { minutes = '', actions = '', remarks = '', followup = null } = {}) {
+  const meeting = allMeetings.find(m => m.id === id);
+  if (!meeting) throw new Error('Meeting not found.');
+  if (meeting.status !== 'approved') throw new Error(`Only approved meetings can be marked completed (this one is "${meeting.status}").`);
+
+  await updateMeetingStatus(id, 'completed', {
+    meeting_minutes: minutes, action_items: actions, owner_remarks: remarks, follow_up_date: followup || null,
+  });
+  logActivity('completed', meeting.visitor_name + ' meeting completed', id);
+  return meeting;
+}
+
+async function addSlotCore(date, start, end) {
+  if (!date || !start || !end) throw new Error('Date, start time, and end time are all required.');
+  const s = start.length === 5 ? start + ':00' : start;
+  const e = end.length === 5   ? end   + ':00' : end;
+  const { error } = await db.from('slots').insert({ date, start_time: s, end_time: e, status: 'available' });
+  if (error) throw error;
+}
+
+async function blockSlotCore(id) {
+  const { error } = await db.from('slots').update({ status: 'blocked' }).eq('id', id);
+  if (error) throw error;
+}
+
+async function reopenSlotCore(id) {
+  const { error } = await db.from('slots').update({ status: 'available' }).eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteSlotCore(id) {
+  const { error } = await db.from('slots').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Expose to the AI agent (ai-provider.js runs in the same page context)
+window.approveMeetingCore    = approveMeetingCore;
+window.rejectMeetingCore     = rejectMeetingCore;
+window.cancelMeetingCore     = cancelMeetingCore;
+window.rescheduleMeetingCore = rescheduleMeetingCore;
+window.completeMeetingCore   = completeMeetingCore;
+window.addSlotCore           = addSlotCore;
+window.blockSlotCore         = blockSlotCore;
+window.reopenSlotCore        = reopenSlotCore;
+window.deleteSlotCore        = deleteSlotCore;
+window.getAllMeetings        = () => allMeetings;
+
+/* ── QUICK ACTIONS (UI wrappers — now just call the core funcs) ─ */
 async function quickApprove(id) {
-  await updateMeetingStatus(id, 'approved', { owner_remarks: '' });
-  showToast('Meeting approved!', 'success');
-  logActivity('approved', allMeetings.find(m=>m.id===id)?.visitor_name + ' meeting approved', id);
+  try {
+    await approveMeetingCore(id, '');
+    showToast('Meeting approved!', 'success');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 async function quickReject(id) {
-  await updateMeetingStatus(id, 'rejected');
-  showToast('Meeting rejected.', 'warning');
-  logActivity('rejected', allMeetings.find(m=>m.id===id)?.visitor_name + ' meeting rejected', id);
+  try {
+    await rejectMeetingCore(id);
+    showToast('Meeting rejected.', 'warning');
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 async function quickReschedule(id) {
@@ -462,24 +574,13 @@ async function confirmCancel() {
   const reason = document.getElementById('cancelReasonText').value.trim();
   if (!reason) { showToast('Please provide a reason for cancellation.', 'warning'); return; }
 
-  await updateMeetingStatus(selectedMeeting.id, 'cancelled', {
-    cancellation_reason: reason,
-    cancelled_by: 'owner'
-  });
-
-  // Free up the slot if it was booked
   try {
-    await db.from('slots').update({ status: 'available' })
-      .eq('date', selectedMeeting.date)
-      .eq('start_time', selectedMeeting.start_time)
-      .eq('status', 'booked');
+    await cancelMeetingCore(selectedMeeting.id, reason);
+    showToast('Meeting cancelled.', 'info');
+    hideCancelInput();
   } catch (e) {
-    console.warn('Slot update err:', e);
+    showToast('Error: ' + e.message, 'error');
   }
-
-  logActivity('cancelled', selectedMeeting.visitor_name + ' meeting cancelled', selectedMeeting.id);
-  showToast('Meeting cancelled.', 'info');
-  hideCancelInput();
 }
 
 /* ── APPROVE ─────────────────────────────────────────────────── */
@@ -496,21 +597,13 @@ function hideApproveInput() {
 async function confirmApprove() {
   if (!selectedMeeting) return;
   const remarks = document.getElementById('approveRemarksText').value.trim();
-  await updateMeetingStatus(selectedMeeting.id, 'approved', { owner_remarks: remarks });
-
-  // Mark slot as booked
   try {
-    await db.from('slots').update({ status: 'booked' })
-      .eq('date', selectedMeeting.date)
-      .eq('start_time', selectedMeeting.start_time)
-      .eq('status', 'available');
+    await approveMeetingCore(selectedMeeting.id, remarks);
+    showToast('Meeting approved!', 'success');
+    hideApproveInput();
   } catch (e) {
-    console.warn('Slot update err:', e);
+    showToast('Error: ' + e.message, 'error');
   }
-
-  logActivity('approved', selectedMeeting.visitor_name + ' meeting approved', selectedMeeting.id);
-  showToast('Meeting approved!', 'success');
-  hideApproveInput();
 }
 
 /* ── COMPLETE ────────────────────────────────────────────────── */
@@ -530,16 +623,18 @@ function hideCompleteInput() {
 
 async function confirmComplete() {
   if (!selectedMeeting) return;
-  const data = {
-    meeting_minutes: document.getElementById('completeMinutes').value.trim(),
-    action_items:    document.getElementById('completeActions').value.trim(),
-    owner_remarks:   document.getElementById('completeRemarks').value.trim(),
-    follow_up_date:  document.getElementById('completeFollowup').value || null,
-  };
-  await updateMeetingStatus(selectedMeeting.id, 'completed', data);
-  logActivity('completed', selectedMeeting.visitor_name + ' meeting completed', selectedMeeting.id);
-  showToast('Meeting marked as completed!', 'success');
-  hideCompleteInput();
+  try {
+    await completeMeetingCore(selectedMeeting.id, {
+      minutes:  document.getElementById('completeMinutes').value.trim(),
+      actions:  document.getElementById('completeActions').value.trim(),
+      remarks:  document.getElementById('completeRemarks').value.trim(),
+      followup: document.getElementById('completeFollowup').value || null,
+    });
+    showToast('Meeting marked as completed!', 'success');
+    hideCompleteInput();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 /* ── RESCHEDULE ─────────────────────────────────────────────── */
@@ -558,19 +653,16 @@ async function sendReschedule() {
     return;
   }
 
-  await updateMeetingStatus(selectedMeeting.id, 'pending', {
-    new_date:       newDate,
-    new_start_time: newStart + ':00',
-    new_end_time:   newEnd   + ':00',
-    reschedule_reason: reason,
-  });
-
-  logActivity('rescheduled', selectedMeeting.visitor_name + ' meeting rescheduled', selectedMeeting.id);
-  showToast('Reschedule suggestion sent!', 'success');
-  document.getElementById('reschedDate').value  = getTodayStr();
-  document.getElementById('reschedStart').value = '';
-  document.getElementById('reschedEnd').value   = '';
-  document.getElementById('reschedReason').value = '';
+  try {
+    await rescheduleMeetingCore(selectedMeeting.id, newDate, newStart, newEnd, reason);
+    showToast('Reschedule suggestion sent!', 'success');
+    document.getElementById('reschedDate').value  = getTodayStr();
+    document.getElementById('reschedStart').value = '';
+    document.getElementById('reschedEnd').value   = '';
+    document.getElementById('reschedReason').value = '';
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 /* ── UPDATE MEETING STATUS ───────────────────────────────────── */
@@ -883,10 +975,13 @@ async function confirmAddSlot() {
   const start = document.getElementById('modalSlotStart').value;
   const end   = document.getElementById('modalSlotEnd').value;
   if (!date || !start || !end) { showToast('All fields required.', 'warning'); return; }
-  const { error } = await db.from('slots').insert({ date, start_time: start+':00', end_time: end+':00', status: 'available' });
-  if (error) { showToast('Error adding slot: ' + error.message, 'error'); return; }
-  showToast('Slot added!', 'success');
-  closeModal('addSlotOverlay');
+  try {
+    await addSlotCore(date, start, end);
+    showToast('Slot added!', 'success');
+    closeModal('addSlotOverlay');
+  } catch (e) {
+    showToast('Error adding slot: ' + e.message, 'error');
+  }
 }
 
 function editSelectedSlot()      { showToast('Select a slot from Slots Management view to edit.', 'info'); }
@@ -934,15 +1029,18 @@ async function addSlotFromView() {
   const start = document.getElementById('newSlotStart').value;
   const end   = document.getElementById('newSlotEnd').value;
   if (!date || !start || !end) { showToast('All fields required.', 'warning'); return; }
-  const { error } = await db.from('slots').insert({ date, start_time: start+':00', end_time: end+':00', status: 'available' });
-  if (error) { showToast('Error: ' + error.message, 'error'); return; }
-  showToast('Slot added!', 'success');
-  loadSlotsView();
+  try {
+    await addSlotCore(date, start, end);
+    showToast('Slot added!', 'success');
+    loadSlotsView();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 async function blockSelectedSlot() {
   if (!selectedSlot) { showToast('Select a slot first.', 'warning'); return; }
-  await db.from('slots').update({ status: 'blocked' }).eq('id', selectedSlot.id);
+  await blockSlotCore(selectedSlot.id);
   showToast('Slot blocked.', 'warning');
   selectedSlot = null;
   loadSlotsView();
@@ -950,7 +1048,7 @@ async function blockSelectedSlot() {
 
 async function reopenSelectedSlot() {
   if (!selectedSlot) { showToast('Select a slot first.', 'warning'); return; }
-  await db.from('slots').update({ status: 'available' }).eq('id', selectedSlot.id);
+  await reopenSlotCore(selectedSlot.id);
   showToast('Slot reopened!', 'success');
   selectedSlot = null;
   loadSlotsView();
@@ -959,7 +1057,7 @@ async function reopenSelectedSlot() {
 async function deleteSelectedSlot() {
   if (!selectedSlot) { showToast('Select a slot first.', 'warning'); return; }
   if (!confirm('Delete this slot?')) return;
-  await db.from('slots').delete().eq('id', selectedSlot.id);
+  await deleteSlotCore(selectedSlot.id);
   showToast('Slot deleted.', 'info');
   selectedSlot = null;
   loadSlotsView();
