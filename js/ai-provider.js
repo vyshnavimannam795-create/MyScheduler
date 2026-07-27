@@ -13,10 +13,14 @@ const AGENT_TOOLS = {
   visitor: [
     {
       name: 'getAvailableSlots',
-      description: "Get open (unbooked) time slots for a given date. Defaults to today if no date given.",
+      description: "Get open (unbooked) time slots for a given date or a range of dates. Useful for finding available times and suggesting alternatives if a specific slot is unavailable.",
       parameters: {
         type: 'OBJECT',
-        properties: { date: { type: 'STRING', description: 'YYYY-MM-DD, optional' } },
+        properties: { 
+          date: { type: 'STRING', description: 'YYYY-MM-DD, optional single date' },
+          start_date: { type: 'STRING', description: 'YYYY-MM-DD, optional range start' },
+          end_date: { type: 'STRING', description: 'YYYY-MM-DD, optional range end' }
+        },
       },
     },
     {
@@ -30,7 +34,7 @@ const AGENT_TOOLS = {
     },
     {
       name: 'bookMeeting',
-      description: "Create a new meeting request for the visitor. Only call this once you have all required fields — ask the visitor for anything missing first.",
+      description: "Create a new meeting request for the visitor. Only call this once you have all required fields — ask the visitor for anything missing first. If the slot is unavailable, suggest other slots instead.",
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -125,6 +129,21 @@ const AGENT_TOOLS = {
       },
     },
     {
+      name: 'completeMeeting',
+      description: "Mark an approved meeting as completed. You can optionally capture meeting minutes, action items, owner remarks, and a follow-up date.",
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          meeting_id: { type: 'STRING' },
+          minutes:    { type: 'STRING', description: 'Meeting minutes/notes' },
+          actions:    { type: 'STRING', description: 'Action items' },
+          remarks:    { type: 'STRING', description: 'Owner remarks' },
+          followup:   { type: 'STRING', description: 'YYYY-MM-DD for follow-up' },
+        },
+        required: ['meeting_id'],
+      },
+    },
+    {
       name: 'addSlot',
       description: "Create a new open/available time slot.",
       parameters: {
@@ -158,18 +177,69 @@ const AGENT_TOOLS = {
   ],
 };
 
+// Caching structure to minimize database queries
+let _contextCache = {
+  visitor: null,
+  owner: null,
+  visitorTime: 0,
+  ownerTime: 0
+};
+
+function invalidateContextCache() {
+  _contextCache.visitor = null;
+  _contextCache.owner = null;
+  _contextCache.visitorTime = 0;
+  _contextCache.ownerTime = 0;
+}
+
+// Trigger browser component updates immediately
+async function refreshClientUI(userType, email = '') {
+  try {
+    if (userType === 'visitor') {
+      if (typeof window.loadSlots === 'function') await window.loadSlots();
+      if (typeof window.renderCalendar === 'function') await window.renderCalendar();
+      if (typeof window.loadPastRequests === 'function' && email) {
+        await window.loadPastRequests(email);
+      }
+    } else {
+      if (typeof window.loadMeetings === 'function') await window.loadMeetings();
+      if (typeof window.loadStats === 'function') await window.loadStats();
+      if (typeof window.loadActivity === 'function') await window.loadActivity();
+      if (typeof window.renderTable === 'function') window.renderTable();
+      if (typeof window.loadSlotsView === 'function') await window.loadSlotsView();
+    }
+  } catch (err) {
+    console.warn('UI refresh warning:', err);
+  }
+}
+
 /* ── Tool dispatcher — executes the real app functions ───────── */
 async function executeAgentTool(name, args = {}, userType) {
   try {
+    // Any modification invalidates context cache immediately
+    if (name !== 'getAvailableSlots' && name !== 'getMyBookings' && name !== 'getPendingRequests' && name !== 'getTodaySchedule' && name !== 'findMeetings') {
+      invalidateContextCache();
+    }
+
     switch (name) {
       /* ---- visitor tools ---- */
       case 'getAvailableSlots': {
-        const date = args.date || getTodayStr();
-        const { data: slots, error } = await db.from('slots')
-          .select('*').eq('date', date).eq('status', 'available').order('start_time');
+        let query = db.from('slots').select('*').eq('status', 'available');
+        let selectedDate = args.date;
+        if (args.start_date && args.end_date) {
+          query = query.gte('date', args.start_date).lte('date', args.end_date);
+          selectedDate = `${args.start_date} to ${args.end_date}`;
+        } else {
+          selectedDate = args.date || getTodayStr();
+          query = query.eq('date', selectedDate);
+        }
+        const { data: slots, error } = await query.order('date').order('start_time');
         if (error) return { error: error.message };
-        const available = (slots || []).filter(s => !isSlotPast(date, s.end_time));
-        return { date, slots: available.map(s => ({ start: s.start_time, end: s.end_time })) };
+        const available = (slots || []).filter(s => !isSlotPast(s.date, s.end_time));
+        return { 
+          date: selectedDate, 
+          slots: available.map(s => ({ id: s.id, date: s.date, start: s.start_time, end: s.end_time })) 
+        };
       }
 
       case 'getMyBookings': {
@@ -191,12 +261,14 @@ async function executeAgentTool(name, args = {}, userType) {
           name: args.name, email: args.email, title: args.title,
           desc: args.description, date: args.date, start: args.start_time, end: args.end_time,
         });
+        await refreshClientUI('visitor', args.email);
         return { success: true, meeting_id: meeting.id, status: 'pending' };
       }
 
       case 'cancelMyMeeting': {
         if (typeof window.cancelBookingCoreVisitor !== 'function') return { error: 'Cancel function not available on this page.' };
         await window.cancelBookingCoreVisitor(args.meeting_id, args.reason || '');
+        await refreshClientUI('visitor');
         return { success: true };
       }
 
@@ -246,42 +318,61 @@ async function executeAgentTool(name, args = {}, userType) {
       case 'approveMeeting': {
         if (typeof window.approveMeetingCore !== 'function') return { error: 'Approve function not available on this page.' };
         await window.approveMeetingCore(args.meeting_id, args.remarks || '');
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'rejectMeeting': {
         if (typeof window.rejectMeetingCore !== 'function') return { error: 'Reject function not available on this page.' };
         await window.rejectMeetingCore(args.meeting_id);
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'cancelMeeting': {
         if (typeof window.cancelMeetingCore !== 'function') return { error: 'Cancel function not available on this page.' };
         await window.cancelMeetingCore(args.meeting_id, args.reason);
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'rescheduleMeeting': {
         if (typeof window.rescheduleMeetingCore !== 'function') return { error: 'Reschedule function not available on this page.' };
         await window.rescheduleMeetingCore(args.meeting_id, args.new_date, args.new_start_time, args.new_end_time, args.reason || '');
+        await refreshClientUI('owner');
+        return { success: true };
+      }
+
+      case 'completeMeeting': {
+        if (typeof window.completeMeetingCore !== 'function') return { error: 'Complete function not available on this page.' };
+        await window.completeMeetingCore(args.meeting_id, {
+          minutes: args.minutes || '',
+          actions: args.actions || '',
+          remarks: args.remarks || '',
+          followup: args.followup || null
+        });
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'addSlot': {
         if (typeof window.addSlotCore !== 'function') return { error: 'Add-slot function not available on this page.' };
         await window.addSlotCore(args.date, args.start_time, args.end_time);
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'blockSlot': {
         if (typeof window.blockSlotCore !== 'function') return { error: 'Block-slot function not available on this page.' };
         await window.blockSlotCore(args.slot_id);
+        await refreshClientUI('owner');
         return { success: true };
       }
 
       case 'deleteSlot': {
         if (typeof window.deleteSlotCore !== 'function') return { error: 'Delete-slot function not available on this page.' };
         await window.deleteSlotCore(args.slot_id);
+        await refreshClientUI('owner');
         return { success: true };
       }
 
@@ -296,8 +387,6 @@ async function executeAgentTool(name, args = {}, userType) {
 const AI_PROVIDER = {
 
   /* ── Session Management ─────────────────────────────────── */
-  // One persistent session id per (botType) per browser, so history
-  // survives page reloads. "New Chat" starts a fresh session.
   getSessionId(botType) {
     const key = `ms_${botType}_session`;
     let id = localStorage.getItem(key);
@@ -353,20 +442,41 @@ const AI_PROVIDER = {
 
   /* ── Internal Website Context (so AI can answer real questions) ─ */
   async getInternalContext(userType) {
+    const now = Date.now();
+    // Cache check
+    if (_contextCache[userType] && (now - _contextCache[userType + 'Time'] < 30000)) {
+      return _contextCache[userType];
+    }
+
     try {
       const today = getTodayStr();
 
       if (userType === 'visitor') {
+        // Fetch next 7 days of slots for multi-day context
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
         const { data: slots } = await db.from('slots')
-          .select('*').eq('date', today).eq('status', 'available')
+          .select('*')
+          .gte('date', today)
+          .lte('date', nextWeekStr)
+          .eq('status', 'available')
+          .order('date')
           .order('start_time');
+          
         const available = (slots || []).filter(s => !isSlotPast(s.date, s.end_time));
 
-        return `Today's date: ${today}
-Owner: ${CONFIG.OWNER_NAME}
-Available slots today: ${available.length ? available.map(s => formatTimeRange(s.start_time, s.end_time)).join(', ') : 'none left'}
+        const context = `Today's date: ${today} (current time is ${getCurrentTimeStr()})
+Owner Name: ${CONFIG.OWNER_NAME}
+Available slots for the next 7 days:
+${available.length ? available.map(s => `${s.date}: ${formatTimeRange(s.start_time, s.end_time)}`).join('\n') : 'none left'}
 Booking policy:
 ${CONFIG.BOOKING_POLICY}`;
+
+        _contextCache.visitor = context;
+        _contextCache.visitorTime = now;
+        return context;
       }
 
       // Owner context
@@ -377,13 +487,17 @@ ${CONFIG.BOOKING_POLICY}`;
       m.forEach(x => { if (counts[x.status] !== undefined) counts[x.status]++; });
 
       const todaysApproved = m.filter(x => x.date === today && x.status === 'approved');
-      const pendingList = m.filter(x => x.status === 'pending').slice(0, 10);
+      const pendingList = m.filter(x => x.status === 'pending').slice(0, 15);
 
-      return `Today's date: ${today}
-Owner: ${CONFIG.OWNER_NAME}
+      const context = `Today's date: ${today} (current time is ${getCurrentTimeStr()})
+Owner Name: ${CONFIG.OWNER_NAME}
 Dashboard totals — total: ${m.length}, pending: ${counts.pending}, approved: ${counts.approved}, completed: ${counts.completed}, cancelled: ${counts.cancelled}, rejected: ${counts.rejected}
 Today's approved meetings: ${todaysApproved.length ? todaysApproved.map(x => `${x.visitor_name} (${formatTimeRange(x.start_time, x.end_time)})`).join('; ') : 'none'}
-Pending requests (up to 10): ${pendingList.length ? pendingList.map(x => `${x.visitor_name} - "${x.meeting_title}" on ${formatDateShort(x.date)}`).join('; ') : 'none'}`;
+Pending requests (up to 15): ${pendingList.length ? pendingList.map(x => `${x.visitor_name} - "${x.meeting_title}" on ${formatDateShort(x.date)} (${formatTimeRange(x.start_time, x.end_time)}) [ID: ${x.id}]`).join('\n') : 'none'}`;
+
+      _contextCache.owner = context;
+      _contextCache.ownerTime = now;
+      return context;
     } catch (err) {
       console.warn('Context build failed:', err);
       return '';
@@ -400,31 +514,41 @@ Pending requests (up to 10): ${pendingList.length ? pendingList.map(x => `${x.vi
       const context = await this.getInternalContext(userType);
 
       const agentRules = `
-You are also an ACTION AGENT, not just a chatbot. You have tools (functions) that let you actually perform ${userType === 'owner' ? "owner dashboard actions (approve, reject, reschedule, cancel, mark completed, add/block/delete slots)" : "visitor actions (book a meeting, cancel your own meeting, look up your bookings)"}.
+You are a highly capable ACTION AGENT, not just a conversational chatbot. You have tools (functions) that allow you to interact directly with the scheduling system.
+You MUST execute the host's backend logic to perform actions, rather than just telling the user how to do it.
 
-Rules for using tools:
-- Prefer calling a tool over just describing what the user could do manually.
-- If required details are missing (e.g. date/time/email/description), ask a short follow-up question for ONLY the missing piece(s) — don't re-ask for things already given in this conversation.
-- Before calling any tool whose description says DESTRUCTIVE, you must first ask the user to explicitly confirm (e.g. "Cancel John's 3 PM meeting — confirm?") and wait for their next message to say yes/confirm. Only call the tool after that confirmation appears in the conversation.
-- When you don't know a meeting_id or slot_id yet, first call a lookup tool (getPendingRequests / findMeetings / getAvailableSlots) to find it, then act.
-- After a tool call succeeds, tell the user plainly what happened in 1-2 sentences — don't just repeat the raw tool result.
-- If a tool returns an error, explain it briefly and suggest what to try instead (e.g. a different time slot).
-- Never invent a meeting_id, slot_id, date, or time — only use values that came from the user or from a tool result.`;
+IMPORTANT ACTION AND REASONING RULES:
+1. **Understand Intent & Multi-Step Actions**:
+   - Users might speak or write in descriptive, unstructured natural language (e.g. "I want to schedule an hour with Vyshnavi next Wednesday afternoon to review my thesis proposal").
+   - Extract required parameters: Name, Email, Title, Description (min 25 chars), Date, Start Time, End Time.
+   - For relative dates/times, resolve them contextually based on the current date (${getTodayStr()}).
+2. **Handle Slot Unavailability & Suggest Alternatives**:
+   - If a user requests a specific date/time slot that is unavailable, call "getAvailableSlots" with a range of dates around the requested date.
+   - Summarize why the requested slot is unavailable and list the nearest available alternative slots (include date and time range formatted nicely). Ask the user to choose one of those alternatives.
+3. **Handle Missing Details & Follow-up Questions**:
+   - If required details for booking are missing (e.g. name, email, or meeting description is too short), ask a single, clear follow-up question for only the missing items. Do NOT request information already supplied in the conversation history.
+4. **Enforce Confirmation Before Destructive Actions**:
+   - DESTRUCTIVE tools are: cancelMyMeeting, cancelMeeting, rejectMeeting, deleteSlot, blockSlot.
+   - Before executing any destructive tool, you MUST explicitly ask the user for confirmation (e.g., "Would you like to confirm the cancellation of John's meeting on July 30th?"). Only execute the tool after they respond with yes/confirm/proceed in their next message.
+5. **Lookup Before Action**:
+   - If you do not have a meeting_id or slot_id, call the appropriate search or lookup tool (findMeetings, getPendingRequests, getAvailableSlots) first to find it, then execute the action. Never invent IDs.
+6. **Polite, Concise Output**:
+   - Keep responses helpful and under 120 words. Use bullet points (•) for list items. Use plain text (no markdown headers, bold, italics, or complex syntax) so it reads well aloud in speech synthesis.`;
 
       const systemPrompt = userType === 'owner'
-        ? `You are the AI assistant embedded in the owner's dashboard of "MyScheduler", a meeting scheduling web app belonging to ${CONFIG.OWNER_NAME}. You can see live data from the app below — use it to answer accurately. If asked something unrelated to the app, still answer helpfully like a normal general-purpose assistant. Be concise (usually under 100 words), use plain text (no markdown headers), and use short bullet lines with "•" when listing multiple items.
+        ? `You are the AI scheduling agent embedded in the owner's dashboard of "MyScheduler", belonging to ${CONFIG.OWNER_NAME}. You have secure access to approve, reject, reschedule, cancel, complete meetings, and manage time slots. Read the live database context below to assist.
 ${agentRules}
 
-LIVE DASHBOARD DATA:
+LIVE DASHBOARD CONTEXT:
 ${context}`
-        : `You are the AI assistant on the public booking page of "MyScheduler", a meeting scheduling web app. Visitors use this page to book meetings with ${CONFIG.OWNER_NAME}. You can see live data from the app below — use it to answer accurately. If asked something unrelated to the app, still answer helpfully like a normal general-purpose assistant. Be concise (usually under 100 words), use plain text (no markdown headers), and use short bullet lines with "•" when listing multiple items.
+        : `You are the public AI scheduling agent for "MyScheduler", helping visitors book and manage meetings with ${CONFIG.OWNER_NAME}. You can help them book, cancel, or look up their meetings. Read the live database context below to assist.
 ${agentRules}
 
-LIVE BOOKING DATA:
+LIVE BOOKING CONTEXT:
 ${context}`;
 
-      // Include recent turns for conversational continuity
-      const contents = conversationHistory.slice(-8).map(h => ({
+      // Support larger conversation history (up to last 14 turns) for context continuity
+      const contents = conversationHistory.slice(-14).map(h => ({
         role: h.role === 'ai' ? 'model' : 'user',
         parts: [{ text: h.message }],
       }));
@@ -433,10 +557,8 @@ ${context}`;
       const tools = [{ functionDeclarations: AGENT_TOOLS[userType] || [] }];
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.GEMINI_MODEL}:generateContent`;
 
-      // Function-calling loop: model may call tools, we execute them and feed
-      // results back, until it produces a final plain-text answer.
       let finalText = null;
-      const MAX_TURNS = 5;
+      const MAX_TURNS = 8; // Extended loop capacity for complex lookups/refinements
 
       for (let turn = 0; turn < MAX_TURNS; turn++) {
         const res = await fetch(url, {
@@ -449,7 +571,7 @@ ${context}`;
             system_instruction: { parts: [{ text: systemPrompt }] },
             contents,
             tools,
-            generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
+            generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
           }),
         });
 
@@ -479,7 +601,6 @@ ${context}`;
           responseParts.push({ functionResponse: { name, response: result } });
         }
         contents.push({ role: 'function', parts: responseParts });
-        // loop again so the model can turn the tool result into a reply
       }
 
       return finalText || "I've run into trouble finishing that action — could you try rephrasing?";
