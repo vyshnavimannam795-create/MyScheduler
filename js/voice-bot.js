@@ -155,6 +155,7 @@ class VoiceBot {
 
       this.recognition.onresult = (event) => {
         const text = event.results[0][0].transcript;
+        this.stopSpeaking(); // Interruption support: stop synthesis immediately
         this.addBubble('user', text);
         this.processInput(text);
       };
@@ -280,6 +281,7 @@ class VoiceBot {
   // ── Conversational Intent Logic ───────────────────────────
   async processInput(text) {
     const input = text.toLowerCase().trim();
+    this.stopSpeaking(); // Interruption support: stop active speech when user sends a new command
 
     // Reset or cancel
     if (input === 'reset' || input === 'start over' || input === 'clear') {
@@ -332,9 +334,36 @@ class VoiceBot {
     }
   }
 
+  // Helper to detect if a spoken input is a descriptive natural language request
+  isNaturalLanguageCommand(input) {
+    const tokens = input.split(/\s+/);
+    if (tokens.length > 3) {
+      const hasDateInfo = input.includes('today') || input.includes('tomorrow') || input.includes('next') || 
+                          /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/.test(input) ||
+                          /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(input) ||
+                          /\d{4}-\d{2}-\d{2}/.test(input);
+      const hasTimeInfo = input.includes('pm') || input.includes('am') || input.includes('clock') || 
+                          input.includes('at') || /\b\d{1,2}(:\d{2})?\b/.test(input);
+      const hasBookingAction = input.includes('book') || input.includes('schedule') || input.includes('reschedule') || 
+                               input.includes('cancel') || input.includes('approve') || input.includes('reject') || 
+                               input.includes('complete') || input.includes('add') || input.includes('delete') || input.includes('block');
+      
+      if (hasBookingAction && (hasDateInfo || hasTimeInfo || tokens.length > 5)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ── VISITOR FLOWS ─────────────────────────────────────────
   async processVisitorInput(input, text) {
     if (!this.state.intent) {
+      // Prioritize natural language agent for descriptive or one-shot requests
+      if (this.isNaturalLanguageCommand(input)) {
+        await this.askAgentFallback(text);
+        return;
+      }
+
       if (input.includes('book') || input.includes('schedule') || input.includes('make an appointment')) {
         this.state.intent = 'book';
         this.state.step = 'waiting_name';
@@ -387,6 +416,12 @@ class VoiceBot {
 
     // Detect new intent if idle
     if (!this.state.intent) {
+      // Prioritize natural language agent for descriptive or one-shot requests
+      if (this.isNaturalLanguageCommand(input)) {
+        await this.askAgentFallback(text);
+        return;
+      }
+
       // 1. Show Stats
       if (input.includes('stats') || input.includes('summary') || input.includes('dashboard stats')) {
         const { data: meetings, error } = await db.from('meetings').select('status');
@@ -1084,25 +1119,65 @@ class VoiceBot {
 
   parseDate(text) {
     const today = new Date();
-    if (text.includes('today')) {
+    const cleanText = text.toLowerCase().trim();
+
+    if (cleanText.includes('today')) {
       return getTodayStr();
     }
-    if (text.includes('tomorrow')) {
+    if (cleanText.includes('tomorrow') && !cleanText.includes('day after')) {
       const tomorrow = new Date(today);
       tomorrow.setDate(today.getDate() + 1);
       return tomorrow.toISOString().split('T')[0];
     }
+    if (cleanText.includes('day after tomorrow')) {
+      const dayAfter = new Date(today);
+      dayAfter.setDate(today.getDate() + 2);
+      return dayAfter.toISOString().split('T')[0];
+    }
+
+    // Match "in X days"
+    const inDaysMatch = cleanText.match(/in (\d+) days?/);
+    if (inDaysMatch) {
+      const days = parseInt(inDaysMatch[1], 10);
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + days);
+      return targetDate.toISOString().split('T')[0];
+    }
+
+    // Match days of week: "next monday", "this friday"
+    const weekdays = {
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6
+    };
+    for (const [dayName, dayIndex] of Object.entries(weekdays)) {
+      if (cleanText.includes(dayName)) {
+        const targetDate = new Date(today);
+        let currentDay = today.getDay();
+        let daysToAdd = (dayIndex - currentDay + 7) % 7;
+
+        if (cleanText.includes('next')) {
+          daysToAdd += 7;
+        } else if (daysToAdd === 0 && !cleanText.includes('this')) {
+          // If today is Monday and user says "Monday", assume next Monday
+          daysToAdd = 7;
+        }
+        
+        targetDate.setDate(today.getDate() + daysToAdd);
+        return targetDate.toISOString().split('T')[0];
+      }
+    }
+
     // Match YYYY-MM-DD
-    const match = text.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    const match = cleanText.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
     if (match) {
       return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
     }
+
     // Match Month Day (e.g. July 14 or Jul 14)
     const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
     const monthFull = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
     for (let i = 0; i < 12; i++) {
-      if (text.includes(months[i]) || text.includes(monthFull[i])) {
-        const dayMatch = text.match(/\b(\d{1,2})(st|nd|rd|th)?\b/);
+      if (cleanText.includes(months[i]) || cleanText.includes(monthFull[i])) {
+        const dayMatch = cleanText.match(/\b(\d{1,2})(st|nd|rd|th)?\b/);
         if (dayMatch) {
           const day = parseInt(dayMatch[1], 10);
           const targetDate = new Date(today.getFullYear(), i, day);
@@ -1117,17 +1192,28 @@ class VoiceBot {
   }
 
   parseTime(text) {
-    // Parse time like 2 PM, 14:00, 9 AM
-    const clean = text.toLowerCase().replace(/[^\s\d:ap]/g, '').trim();
+    const clean = text.toLowerCase().trim();
+    
+    if (clean.includes('morning')) {
+      return '09:00';
+    }
+    if (clean.includes('afternoon') || clean.includes('after lunch')) {
+      return '14:00';
+    }
+    if (clean.includes('evening')) {
+      return '17:00';
+    }
+
+    const cleanDigits = clean.replace(/[^\s\d:ap]/g, '').trim();
     // Check HH:MM format
-    const matchHHMM = clean.match(/(\d{1,2}):(\d{2})/);
+    const matchHHMM = cleanDigits.match(/(\d{1,2}):(\d{2})/);
     let hour = -1, min = 0;
     
     if (matchHHMM) {
       hour = parseInt(matchHHMM[1], 10);
       min = parseInt(matchHHMM[2], 10);
     } else {
-      const matchHour = clean.match(/(\d{1,2})/);
+      const matchHour = cleanDigits.match(/(\d{1,2})/);
       if (matchHour) hour = parseInt(matchHour[1], 10);
     }
 
@@ -1138,6 +1224,9 @@ class VoiceBot {
       hour += 12;
     } else if (clean.includes('am') && hour === 12) {
       hour = 0;
+    } else if (!clean.includes('am') && !clean.includes('pm') && hour >= 1 && hour <= 7) {
+      // Assumes PM contextually for typical 12-hour spoken inputs (e.g. "at 3" -> 3 PM)
+      hour += 12;
     }
 
     return `${String(hour).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
