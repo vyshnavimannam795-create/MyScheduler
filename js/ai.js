@@ -110,6 +110,12 @@ class AIAssistant {
     const text = this.inputEl?.value.trim();
     if (!text) return;
 
+    // Auto-detect visitor email if available in the form
+    if (this.type === 'visitor') {
+      const formEmail = document.getElementById('visitorEmail')?.value?.trim();
+      if (formEmail) this.setVisitorEmail(formEmail);
+    }
+
     this.inputEl.value = '';
 
     this._addBubble('user', text, true);
@@ -143,8 +149,21 @@ class AIAssistant {
     this.history.push({ role: 'user', message: text });
     const pushAiReply = (reply) => { this.history.push({ role: 'ai', message: reply }); return reply; };
 
-    // ── Visitor Reply Rules ──
-    if (this.type === 'visitor') {
+    // Determine if it is a simple query suitable for predefined fast-path rules
+    const isSimpleVisitorQuery = this.type === 'visitor' && (
+      query === 'available slots' || query === 'slots today' ||
+      query === 'cancellation policy' || query === 'policy' ||
+      query === 'how to book' || query === 'how do i schedule' || query === 'schedule a meeting'
+    );
+
+    const isSimpleOwnerQuery = this.type === 'owner' && (
+      query === 'workload' ||
+      query === 'today\'s schedule' || query === 'today schedule' ||
+      query === 'demand' || query === 'most requests'
+    );
+
+    // ── Visitor Reply Rules (Fast-Path) ──
+    if (this.type === 'visitor' && isSimpleVisitorQuery) {
       if (query.includes('available slots') || query.includes('slots today')) {
         try {
           const { data: slots } = await db.from('slots')
@@ -152,76 +171,35 @@ class AIAssistant {
             .order('start_time');
           const available = (slots || []).filter(s => !isSlotPast(s.date, s.end_time));
           if (available.length === 0) {
-            return "There are no available slots left for today. You can select another date in the calendar!";
+            return pushAiReply("There are no available slots left for today. You can select another date in the calendar!");
           }
           const slotList = available.map(s => `• ${formatTimeRange(s.start_time, s.end_time)}`).join('\n');
-          return `Here are the available slots for today:\n${slotList}`;
+          return pushAiReply(`Here are the available slots for today:\n${slotList}`);
         } catch (err) {
-          return "Could not retrieve slots right now. Please check the 'Available Slots' panel.";
+          return pushAiReply("Could not retrieve slots right now. Please check the 'Available Slots' panel.");
         }
       }
-      if (query.includes('schedule a meeting') || query.includes('how do i schedule')) {
-        return "To schedule a meeting:\n1. Choose an available slot from the 'Available Slots' list.\n2. Fill in the 'Meeting Details' form (Your Name, Email, Title, and Description).\n3. Click the 'Request Meeting' button.";
+      if (query.includes('schedule a meeting') || query.includes('how do i schedule') || query.includes('how to book')) {
+        return pushAiReply("To schedule a meeting:\n1. Choose an available slot from the 'Available Slots' list.\n2. Fill in the 'Meeting Details' form (Your Name, Email, Title, and Description).\n3. Click the 'Request Meeting' button.");
       }
-      if (query.includes('reschedule')) {
-        return "If you need to reschedule, you can choose another slot and submit a new request, or coordinate with the owner who can suggest a rescheduled time from their dashboard.";
+      if (query.includes('policy')) {
+        return pushAiReply("Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).");
       }
-      if (query.includes('cancellation policy')) {
-        return "Cancellation Policy:\n- Meetings can be requested and cancelled at any time.\n- The owner will review and update the status of your meeting (Pending, Approved, Rejected, Cancelled).";
-      }
-
-      // No fast-path rule matched — hand off to the full AI agent
-      // (Gemini + tools: it can look up slots, book, and cancel for real)
-      if (typeof AI_PROVIDER !== 'undefined') {
-        try {
-          const reply = await AI_PROVIDER.ask('visitor', text, this.history);
-          return pushAiReply(reply);
-        } catch (e) {
-          console.error('AI_PROVIDER.ask failed:', e);
-        }
-      }
-      return pushAiReply("I'm a scheduling assistant. Please click one of the suggested questions below or fill out the booking form on the left.");
     }
 
-    // ── Owner Reply Rules ──
-    if (this.type === 'owner') {
-      if (query.includes('need my attention') || query.includes('attention')) {
-        try {
-          const { data } = await db.from('meetings').select('*').eq('status', 'pending');
-          const pending = data || [];
-          if (pending.length === 0) {
-            return "Good news! You have no pending meeting requests awaiting your attention.";
-          }
-          const list = pending.map(m => `• ${m.visitor_name} - "${m.meeting_title}" on ${formatDateShort(m.date)} at ${formatTimeRange(m.start_time, m.end_time)}`).join('\n');
-          return `You have ${pending.length} pending request(s) awaiting approval:\n${list}`;
-        } catch (err) {
-          return "Could not load pending requests.";
-        }
-      }
+    // ── Owner Reply Rules (Fast-Path) ──
+    if (this.type === 'owner' && isSimpleOwnerQuery) {
       if (query.includes('today\'s schedule') || query.includes('today schedule')) {
         try {
           const { data } = await db.from('meetings').select('*').eq('date', today).eq('status', 'approved').order('start_time');
           const todayM = data || [];
           if (todayM.length === 0) {
-            return "You have no approved meetings scheduled for today.";
+            return pushAiReply("You have no approved meetings scheduled for today.");
           }
           const list = todayM.map(m => `• ${formatTimeRange(m.start_time, m.end_time)}: ${m.visitor_name} ("${m.meeting_title}")`).join('\n');
-          return `Here is your schedule for today:\n${list}`;
+          return pushAiReply(`Here is your schedule for today:\n${list}`);
         } catch (err) {
-          return "Could not load today's schedule.";
-        }
-      }
-      if (query.includes('optimal meeting times') || query.includes('suggest optimal')) {
-        try {
-          const { data: slots } = await db.from('slots').select('*').eq('date', today).eq('status', 'available').order('start_time');
-          const available = (slots || []).filter(s => !isSlotPast(s.date, s.end_time));
-          if (available.length === 0) {
-            return "No available slots remain for today. You might want to create new slots in the Slots Management section.";
-          }
-          const best = available.slice(0, 3).map(s => `• ${formatTimeRange(s.start_time, s.end_time)}`).join('\n');
-          return `The best open slots today are:\n${best}`;
-        } catch (err) {
-          return "Could not fetch slots.";
+          return pushAiReply("Could not load today's schedule.");
         }
       }
       if (query.includes('workload')) {
@@ -233,16 +211,16 @@ class AIAssistant {
           let statusStr = "Light";
           if (approved > 5) statusStr = "Heavy";
           else if (approved > 2) statusStr = "Moderate";
-          return `Workload Status:\n- Approved meetings: ${approved}\n- Pending requests: ${pending}\nYour current workload is: ${statusStr}`;
+          return pushAiReply(`Workload Status:\n- Approved meetings: ${approved}\n- Pending requests: ${pending}\nYour current workload is: ${statusStr}`);
         } catch (err) {
-          return "Could not analyze workload.";
+          return pushAiReply("Could not analyze workload.");
         }
       }
-      if (query.includes('most requests') || query.includes('slots have most')) {
+      if (query.includes('most requests') || query.includes('demand')) {
         try {
           const { data } = await db.from('meetings').select('date, start_time, end_time').eq('status', 'pending');
           if (!data || data.length === 0) {
-            return "There are no pending requests to evaluate slot demand.";
+            return pushAiReply("There are no pending requests to evaluate slot demand.");
           }
           const counts = {};
           data.forEach(m => {
@@ -253,26 +231,31 @@ class AIAssistant {
           });
           const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
           const list = sorted.map(([slotInfo, count]) => `• ${slotInfo}: ${count} request(s)`).join('\n');
-          return `Slot demand based on pending requests:\n${list}`;
+          return pushAiReply(`Slot demand based on pending requests:\n${list}`);
         } catch (err) {
-          return "Could not fetch demand stats.";
+          return pushAiReply("Could not fetch demand stats.");
         }
       }
-
-      // No fast-path rule matched — hand off to the full AI agent
-      // (Gemini + tools: it can approve/reject/reschedule/cancel/etc. for real)
-      if (typeof AI_PROVIDER !== 'undefined') {
-        try {
-          const reply = await AI_PROVIDER.ask('owner', text, this.history);
-          return pushAiReply(reply);
-        } catch (e) {
-          console.error('AI_PROVIDER.ask failed:', e);
-        }
-      }
-      return pushAiReply("I can help you monitor requests, view today's schedule, suggest optimal slots, analyze workload, or find high-demand slots.");
     }
 
-    return pushAiReply("How can I assist you today?");
+    // ── Handoff to AI Agent (Gemini + tools) ──
+    if (typeof AI_PROVIDER !== 'undefined') {
+      try {
+        let enhancedText = text;
+        if (this.type === 'visitor') {
+          const formEmail = this.visitorEmail || document.getElementById('visitorEmail')?.value?.trim();
+          if (formEmail) {
+            enhancedText += `\n(System Note: The visitor's current email is ${formEmail})`;
+          }
+        }
+        const reply = await AI_PROVIDER.ask(this.type, enhancedText, this.history);
+        return pushAiReply(reply);
+      } catch (e) {
+        console.error('AI_PROVIDER.ask failed:', e);
+      }
+    }
+
+    return pushAiReply("I'm sorry, I couldn't reach the AI service right now. Please try again or use the forms on screen.");
   }
 
   // ── Bubble Rendering ───────────────────────────────────────
