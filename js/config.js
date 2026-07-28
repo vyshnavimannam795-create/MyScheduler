@@ -1,14 +1,10 @@
 // ============================================================
 //  MyScheduler — Configuration
 // ============================================================
-
 const CONFIG = {
   SUPABASE_URL: 'https://kmspzdffiwqklnysjcto.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imttc3B6ZGZmaXdxa2xueXNqY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MzIxNjMsImV4cCI6MjA5OTMwODE2M30.7q2uWQfxI6-_xodHfE-mqHcmGvOt1WLDkrJkSad9s68',
-
-
   OWNER_EMAIL: 'vyshnavimannam795@gmail.com',
-
   // Email notifications via EmailJS (Free for both Visitor & Owner emails)
   // Setup steps:
   // 1. Go to https://www.emailjs.com and create a free account
@@ -19,16 +15,13 @@ const CONFIG = {
   EMAILJS_TEMPLATE_ID_VISITOR: 'template_l1vwec6', // Template for visitor emails
   EMAILJS_TEMPLATE_ID_OWNER: 'template_anwow39', // Template for owner notifications
   EMAILJS_PUBLIC_KEY: '7PtWUw7mxp1fRlLb6', // ← Paste EmailJS Public Key here
-
   OWNER_NAME: 'Vyshnavi Mannam',
   OWNER_INITIALS: 'VM',
-
-  // AI Assistant — Gemini API key (client-side; visible to anyone who views
-  // source or the GitHub repo). Fine for a demo/college project; rotate this
-  // key at https://aistudio.google.com/apikey if it's ever a real concern.
-  GEMINI_API_KEY: 'AQ.Ab8RN6KaNLDaAYgCV-M0kNMMZjFXjWnEhrKbLPWM56tWQiWhGA',
+  // AI Assistant model name. The actual Gemini API key is NOT stored here
+  // anymore — it lives only in the Vercel environment variable
+  // GEMINI_API_KEY, read server-side by /api/gemini-ask.js. The model
+  // name isn't a secret, so it's fine to keep client-side.
   GEMINI_MODEL: 'gemini-2.0-flash',
-
   // Default hourly time slots (24-h format)
   DEFAULT_SLOT_TIMES: [
     { start: '09:00', end: '10:00' },
@@ -42,7 +35,6 @@ const CONFIG = {
     { start: '17:00', end: '18:00' },
     { start: '18:00', end: '19:00' },
   ],
-
   BOOKING_POLICY: `
 Booking Policy:
 - Meetings can be requested for available time slots shown on the left.
