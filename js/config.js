@@ -21,7 +21,7 @@ const CONFIG = {
   // anymore — it lives only in the Vercel environment variable
   // GEMINI_API_KEY, read server-side by /api/gemini-ask.js. The model
   // name isn't a secret, so it's fine to keep client-side.
-  GEMINI_MODEL: 'gemini-2.0-flash',
+  GEMINI_MODEL: 'gemini-1.5-flash',
   // Default hourly time slots (24-h format)
   DEFAULT_SLOT_TIMES: [
     { start: '09:00', end: '10:00' },
