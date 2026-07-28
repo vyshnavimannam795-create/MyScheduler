@@ -593,14 +593,18 @@ ${context}`;
         // Record the model's function-call turn
         contents.push({ role: 'model', parts });
 
-        // Execute every requested tool call and feed results back
+        // Execute every requested tool call and feed results back.
+        // NOTE: Gemini's API only accepts "user" or "model" as valid
+        // roles — "function" is not a real role and causes a 400 error
+        // on every turn that involves a tool call. Function results
+        // must be sent back as role "user".
         const responseParts = [];
         for (const fc of functionCalls) {
           const { name, args } = fc.functionCall;
           const result = await executeAgentTool(name, args || {}, userType);
           responseParts.push({ functionResponse: { name, response: result } });
         }
-        contents.push({ role: 'function', parts: responseParts });
+        contents.push({ role: 'user', parts: responseParts });
       }
 
       return finalText || "I've run into trouble finishing that action — could you try rephrasing?";
