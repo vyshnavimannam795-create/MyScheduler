@@ -505,11 +505,11 @@ Pending requests (up to 15): ${pendingList.length ? pendingList.map(x => `${x.vi
   },
 
   /* ── Gemini Call (with function-calling agent loop) ─────────── */
+  // NOTE: This no longer calls generativelanguage.googleapis.com directly.
+  // The actual Gemini key lives ONLY in the Vercel environment variable
+  // GEMINI_API_KEY, read server-side by /api/gemini-ask.js. The browser
+  // never sees the key — it just calls our own /api/gemini-ask endpoint.
   async ask(userType, question, conversationHistory = []) {
-    if (!CONFIG.GEMINI_API_KEY) {
-      return "AI answers aren't fully set up yet — add your GEMINI_API_KEY in config.js. Meanwhile, try one of the suggested questions or the built-in commands.";
-    }
-
     try {
       const context = await this.getInternalContext(userType);
 
@@ -555,20 +555,17 @@ ${context}`;
       contents.push({ role: 'user', parts: [{ text: question }] });
 
       const tools = [{ functionDeclarations: AGENT_TOOLS[userType] || [] }];
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.GEMINI_MODEL}:generateContent`;
 
       let finalText = null;
       const MAX_TURNS = 8; // Extended loop capacity for complex lookups/refinements
 
       for (let turn = 0; turn < MAX_TURNS; turn++) {
-        const res = await fetch(url, {
+        const res = await fetch('/api/gemini-ask', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': CONFIG.GEMINI_API_KEY,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
+            model: CONFIG.GEMINI_MODEL,
+            systemPrompt,
             contents,
             tools,
             generationConfig: { temperature: 0.3, maxOutputTokens: 800 },
@@ -576,8 +573,8 @@ ${context}`;
         });
 
         if (!res.ok) {
-          const errText = await res.text();
-          console.error('Gemini API error:', errText);
+          const errBody = await res.text();
+          console.error('Gemini proxy error:', errBody);
           return "I couldn't reach the AI service just now. Please try again in a moment.";
         }
 
