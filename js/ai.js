@@ -145,8 +145,9 @@ class AIAssistant {
     const query = text.toLowerCase().trim();
     const today = getTodayStr();
 
-    // Remember this turn so the AI agent has conversational context
-    this.history.push({ role: 'user', message: text });
+    // Helper to record the AI's reply once we have it. (The user's turn
+    // is recorded further down, right before we hand off to the AI
+    // agent — see the NOTE there for why it isn't pushed here.)
     const pushAiReply = (reply) => { this.history.push({ role: 'ai', message: reply }); return reply; };
 
     // Determine if it is a simple query suitable for predefined fast-path rules
@@ -248,13 +249,19 @@ class AIAssistant {
             enhancedText += `\n(System Note: The visitor's current email is ${formEmail})`;
           }
         }
+        // NOTE: AI_PROVIDER.ask appends `enhancedText` to the contents
+        // itself, so the current turn must NOT already be in
+        // this.history when we call it — otherwise Gemini receives the
+        // same message twice in one request. Record it only after.
         const reply = await AI_PROVIDER.ask(this.type, enhancedText, this.history);
+        this.history.push({ role: 'user', message: text });
         return pushAiReply(reply);
       } catch (e) {
         console.error('AI_PROVIDER.ask failed:', e);
       }
     }
 
+    this.history.push({ role: 'user', message: text });
     return pushAiReply("I'm sorry, I couldn't reach the AI service right now. Please try again or use the forms on screen.");
   }
 
