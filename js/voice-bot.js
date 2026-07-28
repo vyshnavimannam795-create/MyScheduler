@@ -313,7 +313,6 @@ class VoiceBot {
   // ── AI Agent fallback (Gemini + tools) for anything the
   //    deterministic flows above don't recognize ──────────────
   async askAgentFallback(text) {
-    this.history.push({ role: 'user', message: text });
     if (typeof AI_PROVIDER === 'undefined') {
       const msg = this.role === 'owner'
         ? "Command not recognized. Try saying 'Show stats', 'Show requests', 'Approve request 1', or 'Add slot'."
@@ -322,7 +321,12 @@ class VoiceBot {
       return;
     }
     try {
+      // NOTE: pass this.history as-is (it does NOT yet contain the
+      // current message) — AI_PROVIDER.ask appends `question` itself.
+      // Pushing the current message into this.history before calling
+      // ask() here would send it to Gemini twice in the same request.
       const reply = await AI_PROVIDER.ask(this.role, text, this.history);
+      this.history.push({ role: 'user', message: text });
       this.history.push({ role: 'ai', message: reply });
       this.addBubble('ai', reply);
       // The agent may have approved/rejected/rescheduled/etc. behind the
